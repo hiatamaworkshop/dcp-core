@@ -22,8 +22,18 @@
 
 export type BusHandler<T = unknown> = (raw: T, schemaId: string) => void;
 
+/**
+ * Read-only observer of every push, regardless of schemaId.
+ * Unlike a wildcard subscriber, a tap is conceptually non-routing: it is meant
+ * for layers that watch the raw stream go by (retention buffers, recorders,
+ * observation layers) without participating in delivery. The bus itself keeps
+ * no buffer — a tap is the seam through which an external layer can build one.
+ */
+export type BusTap<T = unknown> = (raw: T, schemaId: string) => void;
+
 export class IngestionBus<T = unknown> {
   private readonly channels = new Map<string, BusHandler<T>[]>();
+  private readonly taps: BusTap<T>[] = [];
 
   /**
    * schemaId チャンネルにハンドラを登録する。
@@ -57,6 +67,9 @@ export class IngestionBus<T = unknown> {
    * ハンドラが存在しない場合は何もしない。
    */
   push(raw: T, schemaId: string): void {
+    if (this.taps.length > 0) {
+      for (const t of this.taps) t(raw, schemaId);
+    }
     const specific = this.channels.get(schemaId);
     if (specific) {
       for (const h of specific) h(raw, schemaId);
@@ -65,6 +78,19 @@ export class IngestionBus<T = unknown> {
     if (wildcard) {
       for (const h of wildcard) h(raw, schemaId);
     }
+  }
+
+  /**
+   * Register a read-only tap that observes every push.
+   * Returns an unregister function. Taps run before delivery handlers, but a
+   * tap must not mutate the record or affect routing — it only watches.
+   */
+  tap(observer: BusTap<T>): () => void {
+    this.taps.push(observer);
+    return () => {
+      const i = this.taps.indexOf(observer);
+      if (i !== -1) this.taps.splice(i, 1);
+    };
   }
 
   /** 登録済み schemaId の一覧 (デバッグ用)。 */

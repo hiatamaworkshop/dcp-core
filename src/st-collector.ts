@@ -66,7 +66,7 @@ export interface StCollectorOptions {
 // ── StCollector ────────────────────────────────────────────────
 
 export class StCollector {
-  private readonly windowMs: number;
+  private windowMs: number;
   private readonly vWindows: Map<string, VWindow> = new Map();
   private readonly fWindows: Map<string, FWindow> = new Map();
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -84,6 +84,28 @@ export class StCollector {
     this.monitor.subscribe("vResult", this.onVResult);
     this.monitor.subscribe("flow",    this.onFlow);
     this.timer = setInterval(() => this.flush(), this.windowMs);
+  }
+
+  /** Current flush interval (ms). */
+  getWindowMs(): number {
+    return this.windowMs;
+  }
+
+  /**
+   * Replace the flush interval at runtime.
+   *
+   * The collector itself holds no opinion about *who* changes this or *why* —
+   * it is a plain extension point so an external observation layer can reshape
+   * the aggregation window on a live stream without restarting ingestion.
+   * If the collector is running, the flush timer is restarted on the new interval.
+   */
+  setWindowMs(windowMs: number): void {
+    if (windowMs <= 0) throw new RangeError("windowMs must be positive");
+    this.windowMs = windowMs;
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = setInterval(() => this.flush(), this.windowMs);
+    }
   }
 
   stop(): void {

@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "tsc && node --test dist/decoder.test.js dist/pipeline-connector.test.js dist/validation.test.js dist/pipeline-chain.test.js",
+    "test": "tsc && node --test dist/decoder.test.js dist/pipeline-connector.test.js dist/validation.test.js dist/pipeline-chain.test.js dist/extension-points.test.js",
     "prepublishOnly": "npm run test"
   },
   "files": [

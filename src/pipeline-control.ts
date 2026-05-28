@@ -78,6 +78,7 @@ export class PipelineControl {
 
   private onApprove: QuarantineApproveHandler | null = null;
   private onReject: QuarantineRejectHandler | null = null;
+  private readonly extraHandlers = new Map<string, (msg: OutboundMessage) => void>();
   private connectorRef: PipelineConnector | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private connectorResolver: ((pipelineId: string) => Preprocessor<any> | undefined) | null = null;
@@ -132,6 +133,20 @@ export class PipelineControl {
     this.onReject = handler;
   }
 
+  /**
+   * Register a handler for an outbound message type the core does not handle
+   * natively. This is the extension seam for control concepts that live
+   * outside dcp-core (e.g. an observation layer issuing its own decision types).
+   * The core neither defines nor interprets these types — it only forwards a
+   * matching message to the registered handler. Returns an unregister function.
+   */
+  onExtraDecision(type: string, handler: (msg: OutboundMessage) => void): () => void {
+    this.extraHandlers.set(type, handler);
+    return () => {
+      if (this.extraHandlers.get(type) === handler) this.extraHandlers.delete(type);
+    };
+  }
+
   /** True if the given schemaId (or the pipeline entirely) has been stopped. */
   isStopped(schemaId?: string): boolean {
     return this.stop.stopped.has(undefined) || this.stop.stopped.has(schemaId);
@@ -168,7 +183,16 @@ export class PipelineControl {
       case "quarantine_reject":
         this.applyQuarantineReject(msg.payload as QuarantineRejectPayload);
         break;
+      default:
+        this.applyExtra(msg);
+        break;
     }
+  }
+
+  /** Forward an unrecognized outbound type to its registered handler, if any. */
+  private applyExtra(msg: OutboundMessage): void {
+    const handler = this.extraHandlers.get(msg.type as string);
+    if (handler) handler(msg);
   }
 
   private applyRoutingUpdate(payload: RoutingUpdatePayload): void {
