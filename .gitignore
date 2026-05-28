@@ -2,3 +2,9 @@ node_modules/
 dist/
 dcp-schemas/
 *.tsbuildinfo
+
+# Stray compiler output in the source tree (tsc emits to dist/; these are
+# leftovers from an older build config and must never be committed).
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
