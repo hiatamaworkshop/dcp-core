@@ -71,7 +71,7 @@ export type { ConnectorTable, ConnectorDropHandler } from "./pipeline-connector.
 export type { IngestorX } from "./ingestor.js";
 export { SchemaCache } from "./schema-cache.js";
 export type { SchemaCacheOptions } from "./schema-cache.js";
-export type { SourceAdapter } from "./adapter.js";
+export type { SourceAdapter, AdapterDecodeResult } from "./adapter.js";
 export { JSONAdapter } from "./adapters/json-adapter.js";
 export { HTTPIngestor } from "./ingestors/http-ingestor.js";
 export type { HTTPIngestorOptions } from "./ingestors/http-ingestor.js";

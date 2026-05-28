@@ -499,6 +499,58 @@ $ST collector (Monitor subscriber)
 
 ---
 
+## Domain Filter layer — ドメイン固有検証の作法
+
+Preprocessor と Gate の間に、ドメイン固有のフィルタレイヤーを挟むことができる。
+
+```
+[Preprocessor]    ← structural normalization, Drop/Quarantine/Pass
+      ↓ onPass    ← clean data guaranteed here
+[Domain Filter]   ← stateful, domain-specific judgment
+      ↓ pass only
+[Gate ($V)]       ← Brain-driven, dynamic control
+```
+
+### なぜ Preprocessor の後段か
+
+Preprocessor の `onPass` コールバックはフィールドの型と構造が保証されたクリーンなデータのみを受け取る。Domain Filter はこの保証に依存して演算できる。型が不明なデータに対してドメイン演算を行うと実行時エラーまたはサイレントな誤検知が生じる。
+
+### Domain Filter の特性
+
+| 特性 | 内容 |
+|------|------|
+| ステートフル | 複数パケットにまたがる文脈が必要 (前回値との差分、時間窓内カウント等) |
+| ドメイン固有 | ゲームルール・業務ルール・物理法則など、スキーマ定義では表現できない意味論 |
+| 静的 | Brain によって動的変更されない。閾値は MappingLayer 経由で外部化できるが、ロジック自体は不変 |
+| 非 DCP | DCP の宣言的バリデーション ($V) では「単一パケットの型・範囲」しか表現できない。複数パケットの連続性はドメイン知識が必要 |
+
+### $V との役割分担
+
+```
+Preprocessor   データの「資格審査」 — 構造的に有効か (客観・不変)
+Domain Filter  データの「意味の連続性」審査 — ドメインルールとして有効か (客観・不変)
+$V (Gate)      データの「入場管理」 — 今この状況で通すか (Brain が動的に更新)
+```
+
+$V は「正しさの定義」ではなく「現在の制御意図」を反映する。Brain が `validation_update` で $V の制約を変更するのは、データの正しさの定義が変わったのではなく、パイプラインの運用判断が変わったことを意味する。
+
+### 実装パターン
+
+```typescript
+pre.onPass((array, schemaId) => {
+  // Domain Filter: ドメインロジック異常チェック
+  // → false の場合、drop して gate に渡さない
+  if (!domainFilter.check(schemaId, schema.fields, array)) return;
+
+  // Gate: Brain が動的に設定した $V 制約で評価
+  gate.process(schemaId, schema.fields, array, rowIndex++);
+});
+```
+
+Domain Filter が `false` を返したデータは Gate に到達しない。`vResult` に fail として計上することで $ST → Bot → Brain のフィードバックループには乗せられる。
+
+---
+
 ## Pipeline chaining
 
 Streamers chain. Each segment can have its own Gate with different shadows:
@@ -812,6 +864,57 @@ data or calling pipeline internals directly.
 
 ---
 
+### Channel connection patterns — canonical vs. hack
+
+#### Canonical flow
+
+```
+stream → $V (gate) → $R (routing) → pipeline
+                  ↘ $O (shaping / computation output)
+Brain → PostBox → routing_update → $R
+```
+
+Data and control are separate. Brain issues explicit control messages.
+All routing decisions are traceable.
+
+#### $V >> $O — schema-aware fast path (valid extension)
+
+When `$V` is designed against a specific semantic shadow (schema), it can
+route matching packets directly to a `$O` computation lane — without $R.
+
+```
+$V.combat:v1.damage > 20  →  $O_pvp_stats (lightweight aggregation)
+```
+
+- Useful when Brain has already decided a routing rule and wants to burn it in
+- No Brain involvement after initial setup
+- ShadowRuleBrain weight maturity → distill to $V + $O is a natural endpoint
+
+This is a **valid architectural pattern**, not a hack.
+
+#### $O >> $R — computation-triggered routing (hack, use with caution)
+
+`$O` output directly fires a `$R` routing change when a computed value crosses
+a threshold — bypassing the Brain's decision loop entirely.
+
+```
+$O_damage_avg > 30  →  $R: routing_update → pvp-pipeline
+```
+
+**Why this is not canonical:**
+DCP separates data channels ($O) from control channels ($R).
+Allowing $O to write $R blurs that boundary and makes pipeline state harder
+to trace and audit.
+
+**Acceptable uses (temporary only):**
+- Prototyping: verify logic before wiring it into Brain
+- Emergency stopgap while Brain logic is being designed
+- Must be removed once Brain issues the equivalent `routing_update` formally
+
+> *"Placeholder until Brain takes over. Remove when Brain formalizes the rule."*
+
+---
+
 ### AgentProfile schema
 
 AgentProfile is the shared object between Bot and Brain.
@@ -1099,6 +1202,87 @@ TrialCollector 実装時に統計エンジンを揃えるのが自然なタイ�
 
 ---
 
+## 議論案: ブレインとシャドウの作法（draft）
+
+ZISV を個別機能としてではなく、**より一般的な設計原則の特殊例**として捉え直す議論。
+現時点では採用未確定、今後の実装フェーズで検証する。
+
+### 原則: シャドウ = 推論ゼロの短期予測バッファ
+
+```
+シャドウは「直近未来の是正に使う予測の器」であり、
+  - 密度: 最小限（sampling 前提）
+  - 地平線: 直近（数秒〜1分）
+  - 出力: 数値、not ラベル
+  - 手段: 数理処理のみ（LLM 呼び出し禁止）
+```
+
+ZISV の「推論ゼロ」は ZISV 固有ではなく、**全シャドウに適用される普遍原則**として再定義する。
+DCP 本体 = 数理処理、という設計原則と整合。シャドウを足す度に肥大化する懸念（観測コスト自身が系を変える）を、この制約で封じる。
+
+### 時間スケール階層
+
+| 層 | 応答 | 手段 | 出力 | 領域 |
+|---|---|---|---|---|
+| Weapon | 0ms | 閾値 | 発火/不発火 | 数理 |
+| $ST | ~100ms | 集計 | 現在状態 | 数理 |
+| **Shadow** | **~1s** | **統計/数理** | **予測値** | **数理** |
+| Bot | 数秒 | L-LLM | $I (ラベル) | 推論 |
+| Brain | 分 | Haiku | 決定 | 推論 |
+
+「推論の線」は Shadow と Bot の間に引く。**観測と予測は数理で閉じる**。
+
+### 新チャネル候補: `$F`（Forecast）
+
+Brain への入力を3種に整理:
+
+- `$ST` — 今（observed）
+- `$F` — 直近の未来（forecasted, 数理）
+- `$I` — 今のパターン解釈（inferred, AI）
+
+例:
+```
+["$F", "knowledge:v1", "pass_rate", 0.76, 5000, 0.88, "ewma"]
+              schemaId   metric   predicted  horizonMs  confidence  method
+```
+
+### 認識構造
+
+```
+過去   ─ Recorder / Temporal shadow
+  ↓
+現在   ─ $ST          ← 観測 (数理)
+  ↓
+直近   ─ $F           ← 予測 (数理、shadow 群)
+  ↓
+解釈   ─ $I           ← 推論 (Bot)
+  ↓
+決定   ─ routing_update 等  ← 推論 (Brain)
+```
+
+**観測 → 予測 → 解釈 → 決定** の4段。推論は後半2段のみ。
+
+### シャドウ設計チェックリスト（新規追加時）
+
+1. 射影軸は何か（構成 / 時間 / モデル / 入力 / 予算 / 出力）
+2. 推論フリーで実装可能か（不可なら Bot/Brain 側の責務）
+3. 密度パラメータ（sampling rate）は設計に含まれているか
+4. 予測地平線は定義されているか（超えた先は Brain の仕事）
+5. 出力は `$F` チャネルに載るか、独立チャネルが必要か
+
+### ZISV の位置付け
+
+ZISV は「構成軸を射影軸に取った shadow」の具体例として、本原則の下位に位置付け直される。
+ZISV が尖って見えていた「推論ゼロ制約」は、実は shadow 群全体に引き継ぐべき規律であった、という整理。
+
+### 検証タイミング
+
+- $R ファンアウト実装時（ZISV と同時、最初の shadow 実装）
+- $F チャネル導入の必要性はその時に実データで判断
+- 複数 shadow 並走時の観測コスト（MessagePool 流量増）を計測
+
+---
+
 ## Future: Zero-Inference Shadow Validation / ZISV (遠い将来案)
 
 ### 概念
@@ -1107,6 +1291,7 @@ TrialCollector 実装時に統計エンジンを揃えるのが自然なタイ�
 構造差分を統計だけで検証する。Brain が動くのは本番環境での意思決定時のみ。
 
 > **設計原則: 推論は貴重な資源。シャドウは無推論で動く。**
+> （上記「ブレインとシャドウの作法」で一般化された原則の具体例として整理される見込み）
 
 ### データフロー
 
@@ -1153,6 +1338,61 @@ TrialCollector 実装時に統計エンジンを揃えるのが自然なタイ�
 
 現状は単一パイプラインの Bot → $I → Brain の往復を固める段階。
 TrialCollector は `$R` ファンアウトと同時に実装するのが自然。
+
+### シャドウ分岐の方式: $V 分岐 vs $O 分岐
+
+シャドウパイプラインの「何を変えて並走させるか」には2つの方式がある。
+本質は**分岐点をどこに置くか**の選択であり、データの性質で使い分ける。
+
+**方式A: $V 分岐（フィルタ分岐）**
+
+```
+同一データ → シャドウA: $V.threshold = 20  → $ST_A
+           → シャドウB: $V.threshold = 30  → $ST_B
+           → シャドウC: $V.threshold = 50  → $ST_C
+                                              ↓
+                                    TrialCollector: どの閾値が最適か
+```
+
+$V の閾値・モードを変えて「通す/落とす」の基準を比較する。
+適するケース: フィルタ精度の最適化、pass_rate と品質のトレードオフ調整。
+
+**方式B: $O 分岐（演算分岐）**
+
+```
+同一データ → シャドウA: $O.damage = raw.damage * 0.5  → $ST_A
+           → シャドウB: $O.damage = raw.damage * 1.5  → $ST_B
+           → シャドウC: $O.speed  = raw.speed * 0.8   → $ST_C
+                                                         ↓
+                                    TrialCollector: どの演算が有意な差を生むか
+```
+
+$O に任意の演算関数（係数変換等）を注入し、変換後のデータに対する
+$ST の変化を観測する。「データにこの変換を当てたら世界はどう変わるか」の実験。
+
+適するケース: 仮説検証、予測モデルの係数探索、感度分析。
+
+**AI の役割（両方式共通）:**
+
+1. 分岐パラメータ（$V 閾値 or $O 係数）を**生成する**
+2. 結果の $ST を **watch する**
+3. パラメータを**調整して再試行する**
+
+パイプライン内部は数理演算のまま。AI が使うのはパラメータ生成と
+結果解釈だけであり、ZISV の「シャドウは推論ゼロで閉じる」原則を破らない。
+
+**方式の選択基準:**
+
+| | $V 分岐 | $O 分岐 |
+|---|---|---|
+| 変えるもの | 通過条件 | データ自体 |
+| 問い | 「何を通すべきか」 | 「データをどう見るべきか」 |
+| 計算コスト | 低（判定のみ） | やや高（演算あり） |
+| 汎用性 | フィルタ最適化に特化 | 仮説検証全般 |
+
+両方式を同一シャドウ内で組み合わせることも可能
+（$O で変換 → 変換後データに $V を当てる）。
+TrialCollector は方式を区別せず $ST 差分だけを見るため、収集層は共通。
 
 ---
 
@@ -1371,3 +1611,117 @@ Ingestor が行う「schemaId への振り分け」はデータ形式の分類�
 
 現状の `Preprocessor.process(RawRecord)` は JSON/CSV ソース向けに動作している。
 IoT ストリーム対応時は本セクションの設計を起点に Ingestor 層を追加する。
+
+---
+
+## 未解決の設計懸念（後日検証用）
+
+本ドキュメントの読解レビュー時に挙がった懸念を記録しておく。実装・運用で当該箇所に触れた際に再評価する。各項目は**問題の指摘**であって、修正方針ではない。
+
+### 1. 層数の多さと認知負荷
+
+Preprocessor → InitialGate → Encoder → Streamer → Gate → MessagePool → $R → downstream、加えて Monitor/PostBox/Brain/Bot のサイドチャネル。各層の責務は個別には明確だが、全体像を最初に掴むための一枚絵・1ページ要約が不在。
+
+- `$V` / `$R` / `$O` / `$I` / `$ST` / `$AP` / `$S` / `$ST-v` / `$ST-f` の glossary が未整備
+- 外部者が読むと、各 `$-prefix` の定義を本文から逆算する必要がある
+- **検証時期**: 新規実装者が入るタイミング、または公開ドキュメント化時
+
+### 2. 検証の二重化コスト
+
+Preprocessor（型・構造保証）+ InitialGate（バッチ事前チェック）+ Gate（$V）で3層の検証が回る。L218 で InitialGate は Preprocessor を置換しないと明記されているが、**実運用での CPU コスト重複**は未評価。
+
+- Preprocessor が信頼できる前提なら InitialGate は `--pre-check` 明示指定時のみで十分では
+- 検証: 本番スループット計測時に InitialGate ON/OFF 差分を取る
+
+### 3. Monitor と MessagePool の関係
+
+L444「`Monitor.emit()` is a thin wrapper over `MessagePool.push()`」。thin wrapper なら Monitor インターフェースを独立に残す積極的理由（後方互換？抽象化？テスト差し替え？）を1行足すべき。
+
+- 現状、Monitor を直接使う path と MessagePool を経由する path の両方がある可能性あり、二重API化のリスク
+
+### 4. Pipeline Registry の初期化責任が未定義
+
+L417「Brain AI resolves pipeline IDs via Pipeline Registry」、L1376「resolverFn は呼び出し側が担う」。**誰が Registry に書き込むか**が未記述。
+
+- パイプライン起動時に自己登録？
+- オーケストレータが外部注入？
+- Brain AI が発見プロトコルで収集？
+- マルチプロセス/マルチコンテナ展開時に問題化する
+
+### 5. `pre.onPass()` の上書き footgun
+
+L1284 でテスト注意点として記載されているが、これは API 設計の問題。`onPass` は1個しか登録できず、後発呼び出しが silent に上書きする。
+
+- 対策案: `addPassHandler()` への改名 + 多重登録、または上書き時の warning
+- 検証: 他の callback 系 API（`onDrop`、`onQuarantineApprove` 等）も同じ問題を抱えていないか確認
+
+### 6. バックプレッシャの不在
+
+Bot の IPool は FIFO ring buffer で oldest-drop が明記されている（L785）。一方 MessagePool の `immediateQueue` / `batchQueue` は**容量制限・溢れ時挙動が未記述**。
+
+- 流入 > 排出が続いた場合の OOM リスク
+- Brain AI が遅い時に immediate-fail が無限に溜まる可能性
+- 検証: 負荷テストで queue 長の観測
+
+### 7. `isolate` モードの命名
+
+L317 `isolate: PASS → dropped, FAIL → MessagePool`。「isolate」から「PASS側を捨てる」を読み取るのは難しい。
+
+- 候補: `failOnly`、`invert`、`captureFailures`
+- 破壊的変更になるのでメジャーバージョン更新時に合わせるのが妥当
+
+### 8. 性能目標・定量値の不在
+
+「fast」「low latency」「lightweight」が多用されるが定量値がない。
+
+- Gate の per-row budget（μs単位）
+- Streamer の target rps
+- 100ms window の選定根拠
+- Bot の L-LLM 呼び出し許容頻度
+- 検証: Brain AI 統合後の実測ベンチ取得時に SLO として確定する
+
+### 9. セキュリティ境界の未定義
+
+PostBox が single broker である以上、以下が未記述:
+
+- 制御メッセージ（routing_update, stop, throttle）の認証
+- Brain AI 偽装への対策
+- Pipeline ↔ PostBox 間の通信路保護（同一プロセス前提？クロスプロセスは？）
+- マルチテナント時の権限分離
+
+現状は「信頼境界 = プロセス境界」の暗黙前提で動いていると思われる。クロスプロセス化の際に必ず論点化する。
+
+### 10. 複数 Bot の協調未定義
+
+L1002「Multiple Bot instances with different profiles can run against the same pipeline simultaneously. Each fires independently」。
+
+- 2つの Bot が同一イベントに対し別々に $I を出したとき、Brain AI はどう reconcile するか
+- 重複・矛盾・優先順位の規約が未定義
+- 検証: 複数プロファイル並走テスト追加時
+
+### 11. ZISV の統計手法未確定
+
+L1194「有意差判断には共通の統計手法が前提」は正しい。しかし候補（スライディング窓 / EWMA / CUSUM / 分位数）の選定基準が未決。
+
+- TrialCollector 実装時にここがボトルネック化する予感
+- 先に「差分が有意」の定義を固めないと、シャドウパイプラインの結論が出ない
+- 検証: ZISV 着手前に統計エンジン選定のミニ設計が必要
+
+### 12. ドキュメント自体の規模
+
+本文書は既に1400行超。章構成はあるが、**「現役仕様」「設計記録」「未来案」「実装状況」が1ファイルに混在**している。
+
+- 読み手が「今動くもの」と「構想」を区別する負荷が高い
+- 分割候補:
+  - `PIPELINE_ARCHITECTURE.md` — 現役仕様（動いているもの）
+  - `DESIGN_DECISIONS.md` — 設計判断の記録（採用 / 不採用 / 保留）
+  - `FUTURE_WORK.md` — ZISV、IoT Ingestor、$ST 統計エンジン差し替え等の未来案
+- 検証: 次回大幅追記のタイミングで分割を判断
+
+### 13. フォーマット崩れ
+
+L1376 の `Pipeline Registry` / `$ST 統計エンジン差し替え` の行が、`未実装 / 将来対応` テーブル本体（L1290〜1294）から切り離されて下方に孤立。
+
+- 原因: `設計課題: JSON前提問題` セクションがテーブルの途中に挿入されている
+- 修正: テーブル行を本体に統合、または設計課題セクションをテーブル後段へ移動
+- 軽微だが、Markdown レンダリングが壊れている可能性あり

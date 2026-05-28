@@ -9,7 +9,20 @@
  */
 
 import type { DcpSchema } from "./schema.js";
-import type { QuarantineReason } from "./postbox.js";
+
+/**
+ * Result of a successful decode operation.
+ *
+ * array       — positional values in schema.fields order
+ * extraFields — keys present in the raw input that are not in schema.fields
+ *               (excluding the schemaId field itself, e.g. "$schema").
+ *               undefined means the adapter does not track extra fields.
+ *               An empty object means no extras were found.
+ */
+export interface AdapterDecodeResult {
+  array: unknown[];
+  extraFields?: Record<string, unknown>;
+}
 
 export interface SourceAdapter<T = unknown> {
   /**
@@ -20,18 +33,11 @@ export interface SourceAdapter<T = unknown> {
 
   /**
    * Convert raw input to a positional array conforming to the resolved schema.
-   * Array order must match schema.fields order exactly.
-   * Returns null if conversion fails (→ Drop).
-   */
-  decode(raw: T, schema: DcpSchema): unknown[] | null;
-
-  /**
-   * Inspect raw input for quarantine signals before decode.
-   * Called after schemaId resolves successfully.
-   * Returns a QuarantineReason if the adapter detects a structural issue,
-   * or null if no quarantine signal is detected.
+   * Returns a DecodeResult on success, or null if conversion fails (→ Drop).
    *
-   * Optional — adapters that cannot detect quarantine signals omit this.
+   * extraFields should be populated when the adapter can detect keys in the
+   * raw input that are not part of the schema — these signal schema evolution
+   * and will be quarantined as "unknown_field" by the Preprocessor.
    */
-  quarantineHint?(raw: T): QuarantineReason | null;
+  decode(raw: T, schema: DcpSchema): AdapterDecodeResult | null;
 }

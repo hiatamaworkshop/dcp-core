@@ -8,7 +8,7 @@
  * Bukkit Plugin など外部ソースが JSON POST する場合はこれをそのまま使う。
  */
 
-import type { SourceAdapter } from "../adapter.js";
+import type { SourceAdapter, AdapterDecodeResult } from "../adapter.js";
 import type { DcpSchema } from "../schema.js";
 
 export class JSONAdapter implements SourceAdapter<Record<string, unknown>> {
@@ -22,8 +22,21 @@ export class JSONAdapter implements SourceAdapter<Record<string, unknown>> {
   /**
    * schema.fields 順に positional array を構築する。
    * フィールドが存在しない場合は null を詰める。
+   * schema.fields にも schemaField にも該当しないキーは extraFields に収める。
    */
-  decode(raw: Record<string, unknown>, schema: DcpSchema): unknown[] | null {
-    return schema.fields.map((f) => raw[f] ?? null);
+  decode(raw: Record<string, unknown>, schema: DcpSchema): AdapterDecodeResult | null {
+    const array = schema.fields.map((f) => raw[f] ?? null);
+
+    const knownKeys = new Set<string>(schema.fields);
+    knownKeys.add(this.schemaField);
+    const extraFields: Record<string, unknown> = {};
+    for (const key of Object.keys(raw)) {
+      if (!knownKeys.has(key)) extraFields[key] = raw[key];
+    }
+
+    return {
+      array,
+      extraFields: Object.keys(extraFields).length > 0 ? extraFields : {},
+    };
   }
 }

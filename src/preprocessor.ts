@@ -144,15 +144,23 @@ export class Preprocessor<T = unknown> {
     const { schema, vShadow } = entry;
 
     // ── Decode → positional array ─────────────────────────────────────────────
-    const array = this.adapter.decode(raw, schema);
-    if (!array) {
+    const result = this.adapter.decode(raw, schema);
+    if (!result) {
       this.drop(raw, "decode failed");
       return;
     }
 
+    const { array, extraFields } = result;
+
     // ── Field count checks ────────────────────────────────────────────────────
-    // JSONAdapter は null を詰めるので、missing はフィールド数ではなく null 値で検出する
-    // unknown フィールド: array が schema.fieldCount より長い場合
+    // extraFields: Adapter が検出したスキーマ外キー → unknown_field quarantine
+    if (extraFields && Object.keys(extraFields).length > 0) {
+      this.quarantine(array, schemaId, "unknown_field",
+        `unknown fields: ${Object.keys(extraFields).join(", ")}`);
+      return;
+    }
+
+    // array 長チェック: Adapter が extraFields を提供しない場合のフォールバック
     if (array.length > schema.fieldCount) {
       this.quarantine(array, schemaId, "unknown_field",
         `decoded array length ${array.length} exceeds schema fieldCount ${schema.fieldCount}`);
