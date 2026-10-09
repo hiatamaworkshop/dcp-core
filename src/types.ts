@@ -134,6 +134,12 @@ export interface Weapon {
   op: "<" | ">" | "<=" | ">=" | "==" | "!=";
   threshold: number;
   weight: number;
+  /**
+   * Skip this Weapon when the $ST-v window holds fewer rows than this.
+   * A rate over a handful of rows is mostly noise (one failed row reads as pass_rate 0).
+   * A skipped Weapon counts as not fired. Default: no minimum.
+   */
+  minTotal?: number;
 }
 
 /**

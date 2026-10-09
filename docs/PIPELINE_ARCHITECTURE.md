@@ -930,6 +930,7 @@ interface Weapon {
   op: "<" | ">" | "<=" | ">=" | "==" | "!=";
   threshold: number;
   weight: number;                        // contribution to score trigger
+  minTotal?: number;                     // skip (= not fired) while the $ST-v window has fewer rows
 }
 
 type TriggerMode =

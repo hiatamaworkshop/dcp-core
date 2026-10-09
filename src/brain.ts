@@ -25,6 +25,8 @@ import type { IPool } from "./i-pool.js";
 import type { IPacket, AgentProfile } from "./types.js";
 import type { PostBox, QuarantineApprovePayload, QuarantineRejectPayload, QuarantinePayload } from "./postbox.js";
 import type { Monitor } from "./monitor.js";
+import { ClaudeCallLog } from "./claude-meta.js";
+import type { ClaudeCallMeta, ClaudeCallStats } from "./claude-meta.js";
 
 // ── Brain adapter interface ───────────────────────────────────────────────────
 
@@ -181,6 +183,8 @@ export interface ClaudeBrainOptions {
    * with a custom model it is sent only when set, since older models (e.g. Haiku 4.5) reject it.
    */
   effort?:        "low" | "medium" | "high" | "max";
+  /** Called after every API call with its stop_reason, token usage and latency. */
+  onMeta?:        (meta: ClaudeCallMeta) => void;
 }
 
 /**
@@ -195,6 +199,7 @@ export class ClaudeBrain implements BrainAdapter {
   private readonly systemContext: string;
   private readonly pipelineId:    string;
   private readonly effort:        ClaudeBrainOptions["effort"];
+  private readonly log:           ClaudeCallLog;
 
   constructor(options: ClaudeBrainOptions = {}) {
     this.client        = new Anthropic({ apiKey: options.apiKey });
@@ -202,6 +207,12 @@ export class ClaudeBrain implements BrainAdapter {
     this.systemContext = options.systemContext ?? "";
     this.pipelineId    = options.pipelineId   ?? "pipeline://default";
     this.effort        = options.effort       ?? (options.model ? undefined : "medium");
+    this.log           = new ClaudeCallLog(options.onMeta);
+  }
+
+  /** Call count and stop_reason tally, so refusals and max_tokens cuts can be read back. */
+  stats(): ClaudeCallStats {
+    return this.log.stats();
   }
 
   async evaluate(input: BrainInput): Promise<BrainDecision> {
@@ -243,6 +254,7 @@ export class ClaudeBrain implements BrainAdapter {
       }, null, 2),
     ].join("\n");
 
+    const startedAt = Date.now();
     const msg = await this.client.messages.create({
       model:      this.model,
       // A ceiling, not a target: models that think by default count thinking toward it.
@@ -253,6 +265,7 @@ export class ClaudeBrain implements BrainAdapter {
         format: { type: "json_schema", schema: BRAIN_DECISION_SCHEMA },
       },
     });
+    this.log.record(this.model, msg, startedAt);
 
     // Schema-valid JSON is guaranteed only for a completed turn
     // (max_tokens truncates it; a refusal may not follow the schema).

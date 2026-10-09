@@ -27,6 +27,8 @@ import type { AgentProfile, Weapon, TriggerMode, IPacket } from "./types.js";
 import type { StVRow, StFRow } from "./st-collector.js";
 import type { OutboundMessage } from "./postbox.js";
 import type { AgentProfilePayload } from "./postbox.js";
+import { ClaudeCallLog } from "./claude-meta.js";
+import type { ClaudeCallMeta, ClaudeCallStats } from "./claude-meta.js";
 
 // ── Metrics snapshot passed to Weapon evaluation ──────────────────────────────
 
@@ -102,17 +104,26 @@ export interface ClaudeAdapterOptions {
    * with a custom model it is sent only when set, since older models (e.g. Haiku 4.5) reject it.
    */
   effort?: "low" | "medium" | "high" | "max";
+  /** Called after every API call with its stop_reason, token usage and latency. */
+  onMeta?: (meta: ClaudeCallMeta) => void;
 }
 
 export class ClaudeAdapter implements LlmAdapter {
   private readonly client: Anthropic;
   private readonly model:  string;
   private readonly effort: ClaudeAdapterOptions["effort"];
+  private readonly log:    ClaudeCallLog;
 
   constructor(options: ClaudeAdapterOptions = {}) {
     this.client = new Anthropic({ apiKey: options.apiKey });
     this.model  = options.model ?? "claude-haiku-5-5";
     this.effort = options.effort ?? (options.model ? undefined : "low");
+    this.log    = new ClaudeCallLog(options.onMeta);
+  }
+
+  /** Call count and stop_reason tally, so refusals and max_tokens cuts can be read back. */
+  stats(): ClaudeCallStats {
+    return this.log.stats();
   }
 
   async infer(input: LlmInput): Promise<LlmOutput> {
@@ -127,6 +138,7 @@ export class ClaudeAdapter implements LlmAdapter {
       "Describe the anomaly in one sentence (signal) and rate its severity.",
     ].filter(Boolean).join("\n");
 
+    const startedAt = Date.now();
     const msg = await this.client.messages.create({
       model:      this.model,
       // A ceiling, not a target: models that think by default count thinking toward it.
@@ -137,6 +149,7 @@ export class ClaudeAdapter implements LlmAdapter {
         format: { type: "json_schema", schema: LLM_OUTPUT_SCHEMA },
       },
     });
+    this.log.record(this.model, msg, startedAt);
 
     // Schema-valid JSON is guaranteed only for a completed turn.
     if (msg.stop_reason !== "end_turn") {
@@ -155,6 +168,7 @@ export class ClaudeAdapter implements LlmAdapter {
 // ── FastGate helpers ──────────────────────────────────────────────────────────
 
 function evalWeapon(w: Weapon, m: StMetrics): boolean {
+  if (w.minTotal !== undefined && m.total < w.minTotal) return false;
   const val = (m as unknown as Record<string, number>)[w.metric];
   if (val === undefined) return false;
   switch (w.op) {
