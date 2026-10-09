@@ -183,7 +183,7 @@ export interface ClaudeBrainOptions {
    * with a custom model it is sent only when set, since older models (e.g. Haiku 4.5) reject it.
    */
   effort?:        "low" | "medium" | "high" | "max";
-  /** Called after every API call with its stop_reason, token usage and latency. */
+  /** Called after every completed API call (not one that throws) with its stop_reason, token usage and latency. */
   onMeta?:        (meta: ClaudeCallMeta) => void;
 }
 

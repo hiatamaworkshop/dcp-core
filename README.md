@@ -177,7 +177,7 @@ class MyBrain implements BrainAdapter {
 // Claude (Haiku) — drop-in replacement, same interface
 const brain = new ClaudeBrain({ model: "claude-haiku-5-5" });
 
-// Every API call reports stop_reason, token usage and latency; stats() tallies stop_reasons
+// Every completed API call reports stop_reason, token usage and latency; stats() tallies stop_reasons
 const watched = new ClaudeBrain({ onMeta: (m) => console.log(m.stopReason, m.outputTokens) });
 ```
 
