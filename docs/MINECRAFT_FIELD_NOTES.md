@@ -88,18 +88,17 @@ README は「異常が収まると Brain が迂回と `$V` を自動で元に戻
 
 ---
 
-## 4. コアに残る未解決: Ingestor 構成では `rowsPerSec` が常に 0
+## 4. Ingestor 構成での `rowsPerSec`
 
-`$ST-f` の `rowsPerSec` は、StCollector が Monitor の `flow` メッセージから受け取る値で、`flow` を出すのは Streamer だけである。
-HTTPIngestor → Preprocessor → Gate という構成では `flow` が出ないため、`rowsPerSec` は常に 0 になる。
+`$ST-f` の `rowsPerSec` は、Monitor の `flow` メッセージから来る。`flow` を出すのは Streamer だけなので、
+HTTPIngestor → Preprocessor → Gate という構成では、かつて `rowsPerSec` が常に 0 だった。
+その結果、`rowsPerSec > N` の Weapon は決して発火せず（dcp-minecraft の `high_flow` Weapon はこの理由で外した。`b80e522`）、
+`rowsPerSec < N` の Weapon は常に発火していた。
 
-その結果、Bot の Weapon のうち `rowsPerSec` を見るものは次のように壊れる。
-
-- `rowsPerSec > N` は決して発火しない（dcp-minecraft の `high_flow` Weapon はこの理由で外した。`b80e522`）。
-- `rowsPerSec < N` は常に発火する。
-
-Ingestor 経路で流量を出す（Gate や Preprocessor が `flow` を出す、または StCollector が vResult から数える）まで、
-`rowsPerSec` を見る Weapon はこの構成では使えない。
+現在の StCollector は、ウィンドウ内に `flow` が届かなかったスキーマについて、vResult の件数をウィンドウ長で割って
+`rowsPerSec` を出す（[src/st-collector.ts](../src/st-collector.ts)、テストは [src/st-collector.test.ts](../src/st-collector.test.ts)）。
+この値が数えるのは Gate に届いた登録済みスキーマの行である。Preprocessor で隔離された行と、Gate が素通しする未登録スキーマの行は含まない。
+dcp-minecraft で外した `high_flow` Weapon は、この前提で戻せる。
 
 ---
 

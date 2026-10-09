@@ -10,6 +10,10 @@
  *   $ST-f  flow statistics:
  *     ["$ST-f", schemaId, rowsPerSec, windowMs]
  *
+ * rowsPerSec comes from "flow" messages when a source emits them (Streamer).
+ * Otherwise it is derived from the vResult count, so pipelines fed by an
+ * Ingestor (no Streamer) still report real flow instead of a constant 0.
+ *
  * Consumers (lightweight AI agents) subscribe to the type they care about.
  */
 
@@ -55,6 +59,8 @@ interface VWindow {
 
 interface FWindow {
   rowsPerSec: number;   // latest value from flow message
+  fromFlow: boolean;    // a flow message arrived in this window
+  rows: number;         // vResult count in this window (fallback source)
   windowStart: number;
 }
 
@@ -70,6 +76,8 @@ export class StCollector {
   private readonly vWindows: Map<string, VWindow> = new Map();
   private readonly fWindows: Map<string, FWindow> = new Map();
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** Start of the current window; new schemas join it rather than starting their own. */
+  private lastFlush = Date.now();
 
   constructor(
     private readonly monitor: Monitor,
@@ -83,6 +91,7 @@ export class StCollector {
   start(): void {
     this.monitor.subscribe("vResult", this.onVResult);
     this.monitor.subscribe("flow",    this.onFlow);
+    this.lastFlush = Date.now();
     this.timer = setInterval(() => this.flush(), this.windowMs);
   }
 
@@ -128,16 +137,23 @@ export class StCollector {
       this.vWindows.set(msg.schemaId, win);
     }
     if (p.pass) win.pass++; else win.fail++;
+    this.fWindow(msg.schemaId).rows++;
   }
 
   private onFlow(msg: PipelineMessage): void {
     const p = msg.payload as FlowPayload;
-    let win = this.fWindows.get(msg.schemaId);
-    if (!win) {
-      win = { rowsPerSec: 0, windowStart: Date.now() };
-      this.fWindows.set(msg.schemaId, win);
-    }
+    const win = this.fWindow(msg.schemaId);
     win.rowsPerSec = p.rowsPerSec;
+    win.fromFlow = true;
+  }
+
+  private fWindow(schemaId: string): FWindow {
+    let win = this.fWindows.get(schemaId);
+    if (!win) {
+      win = { rowsPerSec: 0, fromFlow: false, rows: 0, windowStart: this.lastFlush };
+      this.fWindows.set(schemaId, win);
+    }
+    return win;
   }
 
   // ── Flush ──────────────────────────────────────────────────
@@ -177,10 +193,13 @@ export class StCollector {
     // $ST-f
     for (const [schemaId, win] of this.fWindows) {
       const elapsed = now - win.windowStart;
+      const rowsPerSec = win.fromFlow
+        ? win.rowsPerSec
+        : elapsed > 0 ? Math.round((win.rows / elapsed) * 1000) : 0;
       const row: StFRow = [
         "$ST-f",
         schemaId,
-        win.rowsPerSec,
+        rowsPerSec,
         elapsed,
       ];
 
@@ -193,7 +212,10 @@ export class StCollector {
       });
 
       win.rowsPerSec = 0;
+      win.fromFlow = false;
+      win.rows = 0;
       win.windowStart = now;
     }
+    this.lastFlush = now;
   }
 }

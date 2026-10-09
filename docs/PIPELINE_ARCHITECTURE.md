@@ -1172,7 +1172,8 @@ filter (`types: ["*"]`). It adds no overhead to the pipeline itself.
 
 ```
 $ST-v: pass / fail カウント → pass_rate = pass / total
-$ST-f: 最後の flow メッセージの rowsPerSec をそのまま使用
+$ST-f: ウィンドウ内に flow メッセージ（Streamer）が届けばその rowsPerSec、
+       届かなければ vResult の件数 ÷ ウィンドウ長（Ingestor → Preprocessor → Gate の構成）
 ```
 
 Bot の Weapon 評価（`pass_rate < 0.9` 等）にはこれで十分だが、
