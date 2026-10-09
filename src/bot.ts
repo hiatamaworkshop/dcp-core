@@ -74,6 +74,17 @@ export class RuleBasedLlm implements LlmAdapter {
   }
 }
 
+/** Response schema enforced via structured outputs (output_config.format). */
+const LLM_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    signal:   { type: "string", description: "One sentence describing the anomaly" },
+    severity: { type: "string", enum: ["low", "medium", "high"] },
+  },
+  required: ["signal", "severity"],
+} as const;
+
 /**
  * ClaudeAdapter — calls Claude (Haiku by default) as the Bot's L-LLM.
  *
@@ -106,30 +117,28 @@ export class ClaudeAdapter implements LlmAdapter {
       `Metrics: pass_rate=${metrics.pass_rate}, fail=${metrics.fail}, total=${metrics.total}, rowsPerSec=${metrics.rowsPerSec}`,
       profile.llmPromptHint ? `Hint: ${profile.llmPromptHint}` : "",
       "",
-      "Respond with JSON only: {\"signal\": \"<one sentence>\", \"severity\": \"low|medium|high\"}",
+      "Describe the anomaly in one sentence (signal) and rate its severity.",
     ].filter(Boolean).join("\n");
 
     const msg = await this.client.messages.create({
       model:      this.model,
-      max_tokens: 128,
+      // A ceiling, not a target: models that think by default count thinking toward it.
+      max_tokens: 16000,
       messages:   [{ role: "user", content: prompt }],
+      output_config: { format: { type: "json_schema", schema: LLM_OUTPUT_SCHEMA } },
     });
+
+    // Schema-valid JSON is guaranteed only for a completed turn.
+    if (msg.stop_reason !== "end_turn") {
+      return { signal: `[claude] no output: stop_reason=${msg.stop_reason}`, severity: "low" };
+    }
 
     const text = msg.content
       .filter((b) => b.type === "text")
       .map((b) => (b as { type: "text"; text: string }).text)
       .join("");
 
-    try {
-      const parsed = JSON.parse(text) as { signal?: string; severity?: string };
-      const severity = (["low", "medium", "high"].includes(parsed.severity ?? ""))
-        ? parsed.severity as LlmOutput["severity"]
-        : "low";
-      return { signal: parsed.signal ?? text, severity };
-    } catch {
-      // fallback if model doesn't return clean JSON
-      return { signal: text.slice(0, 200), severity: "low" };
-    }
+    return JSON.parse(text) as LlmOutput;
   }
 }
 

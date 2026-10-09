@@ -128,12 +128,53 @@ export class RuleBasedBrain implements BrainAdapter {
 
 // ── ClaudeBrain ───────────────────────────────────────────────────────────────
 
+/**
+ * Response schema enforced via structured outputs (output_config.format).
+ * Every object needs additionalProperties: false, so correctedRecord travels
+ * as a JSON-encoded string and is decoded in ClaudeBrain.evaluate().
+ */
+const BRAIN_DECISION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    rerouteSchema: {
+      type: "object", additionalProperties: false,
+      properties: { schemaId: { type: "string" }, toPipelineId: { type: "string" } },
+      required: ["schemaId", "toPipelineId"],
+    },
+    throttle: {
+      type: "object", additionalProperties: false,
+      properties: { schemaId: { type: "string" }, rps: { type: "number" } },
+      required: ["rps"],
+    },
+    stop: {
+      type: "object", additionalProperties: false,
+      properties: { schemaId: { type: "string" } },
+      required: [],
+    },
+    quarantineApprove: {
+      type: "object", additionalProperties: false,
+      properties: {
+        quarantineId:    { type: "string" },
+        correctedRecord: { type: "string", description: "JSON-encoded corrected record, if the record needs fixing" },
+      },
+      required: ["quarantineId"],
+    },
+    quarantineReject: {
+      type: "object", additionalProperties: false,
+      properties: { quarantineId: { type: "string" }, reason: { type: "string" } },
+      required: ["quarantineId", "reason"],
+    },
+    rationale: { type: "string" },
+  },
+} as const;
+
 export interface ClaudeBrainOptions {
   model?:         string;
   apiKey?:        string;
   /** Domain-specific context injected at the top of every prompt. */
   systemContext?: string;
-  /** The pipeline ID that control actions should target. Used in packet formatting to prevent botId/pipelineId confusion. */
+  /** The pipeline ID that control actions target. Filled in by code; the model never chooses it. */
   pipelineId?:   string;
 }
 
@@ -162,23 +203,20 @@ export class ClaudeBrain implements BrainAdapter {
 
     console.log(`[CLAUDE-BRAIN] evaluate called: packets=${packets.length} quarantines=${quarantines.length}`);
 
-    // Format $I packets for Haiku: separate observer identity from action target.
-    // "observer" = the Bot that fired the signal (do NOT use as pipelineId target).
-    // "target_pipeline" = the pipeline to apply control actions to (from domain context).
+    // "observer" = the Bot that fired the signal. The action target pipeline is
+    // not in the prompt: it is set from this.pipelineId after parsing.
     const packetSummary = packets.map((p) =>
-      `- observer=${p.botId} | schema=${p.schemaId} | severity=${p.severity} | signal="${p.signal}" | target_pipeline=${this.pipelineId}`,
+      `- observer=${p.botId} | schema=${p.schemaId} | severity=${p.severity} | signal="${p.signal}"`,
     ).join("\n") || "(none)";
 
     const quarantineSummary = quarantines.map((q) =>
-      `- quarantineId=${q.payload.quarantineId} | schema=${q.payload.schemaId} | reason=${q.payload.reason} | detail="${q.payload.detail}" | target_pipeline=${this.pipelineId}`,
+      `- quarantineId=${q.payload.quarantineId} | schema=${q.payload.schemaId} | reason=${q.payload.reason} | detail="${q.payload.detail}"`,
     ).join("\n") || "(none)";
 
     const prompt = [
       "You are a pipeline control authority (Brain AI).",
       "You receive inference signals ($I) from Bot observers and quarantined records.",
       "Based on the inputs below, decide what control action to take.",
-      "IMPORTANT: 'observer' is the Bot ID that detected the anomaly — it is NOT a pipeline target.",
-      "Always use 'target_pipeline' as the pipelineId in your actions.",
       ...(this.systemContext ? ["", "## Domain context", this.systemContext] : []),
       "",
       "$I packets:",
@@ -187,38 +225,52 @@ export class ClaudeBrain implements BrainAdapter {
       "Quarantined records (decide approve or reject for each):",
       quarantineSummary,
       "",
-      "Available actions (respond with JSON only, omit fields you don't use):",
+      "Available actions (omit fields you don't use):",
       JSON.stringify({
         rerouteSchema:    { schemaId: "<id>", toPipelineId: "pipeline://<id>" },
-        throttle:         { pipelineId: "pipeline://<id>", schemaId: "<optional>", rps: 10 },
-        stop:             { pipelineId: "pipeline://<id>", schemaId: "<optional>" },
-        quarantineApprove: { pipelineId: "pipeline://<id>", quarantineId: "<id>", correctedRecord: "<optional>" },
-        quarantineReject:  { pipelineId: "pipeline://<id>", quarantineId: "<id>", reason: "<explanation>" },
+        throttle:         { schemaId: "<optional>", rps: 10 },
+        stop:             { schemaId: "<optional>" },
+        quarantineApprove: { quarantineId: "<id>", correctedRecord: "<optional>" },
+        quarantineReject:  { quarantineId: "<id>", reason: "<explanation>" },
         rationale:        "<one sentence explanation>",
       }, null, 2),
     ].join("\n");
 
     const msg = await this.client.messages.create({
       model:      this.model,
-      max_tokens: 256,
+      // A ceiling, not a target: models that think by default count thinking toward it.
+      max_tokens: 16000,
       messages:   [{ role: "user", content: prompt }],
+      output_config: { format: { type: "json_schema", schema: BRAIN_DECISION_SCHEMA } },
     });
+
+    // Schema-valid JSON is guaranteed only for a completed turn
+    // (max_tokens truncates it; a refusal may not follow the schema).
+    if (msg.stop_reason !== "end_turn") {
+      return { rationale: `[claude-brain] no decision: stop_reason=${msg.stop_reason}` };
+    }
 
     const text = msg.content
       .filter((b) => b.type === "text")
       .map((b) => (b as { type: "text"; text: string }).text)
       .join("");
 
-    // Strip markdown code fences if model wraps JSON in ```json ... ```
-    const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    console.log(`[CLAUDE-BRAIN] response: ${text.slice(0, 300)}`);
 
-    console.log(`[CLAUDE-BRAIN] response: ${stripped.slice(0, 300)}`);
-
-    try {
-      return JSON.parse(stripped) as BrainDecision;
-    } catch {
-      return { rationale: stripped.slice(0, 300) };
+    const decision = JSON.parse(text) as BrainDecision;
+    // The target pipeline is fixed by configuration, not chosen by the model.
+    for (const action of [decision.throttle, decision.stop, decision.quarantineApprove, decision.quarantineReject]) {
+      if (action) action.pipelineId = this.pipelineId;
     }
+    const corrected = decision.quarantineApprove?.correctedRecord;
+    if (typeof corrected === "string") {
+      try {
+        decision.quarantineApprove!.correctedRecord = JSON.parse(corrected);
+      } catch {
+        delete decision.quarantineApprove!.correctedRecord;
+      }
+    }
+    return decision;
   }
 }
 

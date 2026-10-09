@@ -26,17 +26,12 @@ LLM はこれをそのまま制御アクションの `pipelineId` ターゲッ�
 { "throttle": { "pipelineId": "pipeline://bot-minecraft-watcher", ... } }
 ```
 
-**対策:** パケットサマリーのフォーマットで役割を明示する。
+**対策:** アクション対象の `pipelineId` を LLM に選ばせない。
+構造化出力のスキーマから `throttle` / `stop` / `quarantineApprove` / `quarantineReject` の `pipelineId` を外し、
+parse 後に `ClaudeBrain` の `pipelineId` オプションの値をコードで埋める。
+パケットサマリーでは検出元を `observer=` として示す（アクション対象ではない）。
 ```
-- observer=bot-minecraft-watcher | schema=combat:v1 | severity=high | target_pipeline=pipeline://dcp-minecraft
-```
-- `observer` = 検出した Bot (アクション対象ではない)
-- `target_pipeline` = 制御アクションを適用すべきパイプライン
-
-プロンプト冒頭にも明示する:
-```
-IMPORTANT: 'observer' is the Bot ID that detected the anomaly — it is NOT a pipeline target.
-Always use 'target_pipeline' as the pipelineId in your actions.
+- observer=bot-minecraft-watcher | schema=combat:v1 | severity=high | signal="..."
 ```
 
 ---
@@ -73,26 +68,28 @@ severity → action のガイドライン) をプロンプトにハードコー�
 - `systemContext` なし → `high severity` でも `throttle` を返し続けた
 - `severity_guidelines` に `high → rerouteSchema` を明示 → 正しく `rerouteSchema → pvp-pipeline` を選択
 
-**教訓:** ガイドラインは「推奨」ではなく意図的に強めに書く。
-例: `"high: prefer rerouteSchema"` より `"high: MUST use rerouteSchema"` の方が効果的。
+**教訓:** 強いアクションを選ばせたい条件は、ガイドラインに条件とアクションの対で書く
+（例: `"high": "prefer rerouteSchema to audit/pvp pipeline"`。§7 の確認はこの書き方で通った）。
+大文字の MUST で強めることはしない。現行モデルは指示に忠実なため、強調は該当しない場面にも適用されやすい。
+必ず守らせたい規則は、プロンプトではなくコード側（スキーマ、parse 後の検査）で決める。
 
 ---
 
-## 5. Markdown フェンス問題
+## 5. JSON 形式は構造化出力で保証する
 
-"JSON only" と指示しても LLM が ` ```json\n{...}\n``` ` で返すことがある。
-
-**対策:** レスポンスを必ず strip してから JSON.parse する。
-```typescript
-const stripped = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-```
+プロンプトで "JSON only" と指示しても、LLM が ` ```json\n{...}\n``` ` で返すことがあった。
+`ClaudeBrain` / `ClaudeAdapter` は `output_config.format`（構造化出力）でスキーマを渡し、
+スキーマに合う JSON を API 側で保証する。フェンス除去や parse 失敗時のフォールバックは要らない。
+`stop_reason` が `end_turn` 以外（`max_tokens` での打ち切り、refusal）のときだけ、出力がスキーマに合わない可能性がある。
 
 ---
 
 ## 6. max_tokens に注意
 
-`rationale` フィールドが長くなると JSON が途中で切れる。
-`max_tokens: 256` は最小限。アクションが複数ある場合は 512 以上を推奨。
+`max_tokens` は上限であり、実際に生成した分だけ課金される。小さく絞ると `rationale` が長いときや
+アクションが複数あるときに JSON が途中で切れる（`stop_reason: "max_tokens"`）。
+また `thinking` を指定しなくても思考が既定で動くモデル（Sonnet 5 など）では、思考も `max_tokens` に数えられる。
+`ClaudeBrain` / `ClaudeAdapter` は 16000 にしている。
 
 ---
 
