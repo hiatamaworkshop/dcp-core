@@ -176,7 +176,10 @@ export interface ClaudeBrainOptions {
   systemContext?: string;
   /** The pipeline ID that control actions target. Filled in by code; the model never chooses it. */
   pipelineId?:   string;
-  /** Thinking depth (output_config.effort). Default "medium". */
+  /**
+   * Thinking depth (output_config.effort). Defaults to "medium" only with the default model;
+   * with a custom model it is sent only when set, since older models (e.g. Haiku 4.5) reject it.
+   */
   effort?:        "low" | "medium" | "high" | "max";
 }
 
@@ -191,14 +194,14 @@ export class ClaudeBrain implements BrainAdapter {
   private readonly model:         string;
   private readonly systemContext: string;
   private readonly pipelineId:    string;
-  private readonly effort:        NonNullable<ClaudeBrainOptions["effort"]>;
+  private readonly effort:        ClaudeBrainOptions["effort"];
 
   constructor(options: ClaudeBrainOptions = {}) {
     this.client        = new Anthropic({ apiKey: options.apiKey });
     this.model         = options.model ?? "claude-haiku-5-5";
     this.systemContext = options.systemContext ?? "";
     this.pipelineId    = options.pipelineId   ?? "pipeline://default";
-    this.effort        = options.effort       ?? "medium";
+    this.effort        = options.effort       ?? (options.model ? undefined : "medium");
   }
 
   async evaluate(input: BrainInput): Promise<BrainDecision> {
@@ -246,7 +249,7 @@ export class ClaudeBrain implements BrainAdapter {
       max_tokens: 16000,
       messages:   [{ role: "user", content: prompt }],
       output_config: {
-        effort: this.effort,
+        ...(this.effort ? { effort: this.effort } : {}),
         format: { type: "json_schema", schema: BRAIN_DECISION_SCHEMA },
       },
     });

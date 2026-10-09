@@ -90,7 +90,8 @@ severity → action のガイドライン) をプロンプトにハードコー�
 アクションが複数あるときに JSON が途中で切れる（`stop_reason: "max_tokens"`）。
 また `thinking` を指定しなくても思考が既定で動くモデル（既定の Haiku 5.5、Sonnet 5 など）では、思考も `max_tokens` に数えられる。
 `ClaudeBrain` / `ClaudeAdapter` は 16000 にしている。思考の量は `effort` オプションで調整する
-（既定は `ClaudeAdapter` が `low`、`ClaudeBrain` が `medium`）。プロンプトで「すぐ答えて」と書いても思考は止まらない。
+（既定モデルのときの既定は `ClaudeAdapter` が `low`、`ClaudeBrain` が `medium`。
+`model` を指定したときは `effort` を指定した場合だけ送る。Haiku 4.5 など effort を受け付けないモデルがあるため）。プロンプトで「すぐ答えて」と書いても思考は止まらない。
 
 ---
 

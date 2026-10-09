@@ -97,19 +97,22 @@ const LLM_OUTPUT_SCHEMA = {
 export interface ClaudeAdapterOptions {
   model?:  string;
   apiKey?: string;   // falls back to ANTHROPIC_API_KEY env var
-  /** Thinking depth (output_config.effort). Default "low": one-sentence classification. */
+  /**
+   * Thinking depth (output_config.effort). Defaults to "low" only with the default model;
+   * with a custom model it is sent only when set, since older models (e.g. Haiku 4.5) reject it.
+   */
   effort?: "low" | "medium" | "high" | "max";
 }
 
 export class ClaudeAdapter implements LlmAdapter {
   private readonly client: Anthropic;
   private readonly model:  string;
-  private readonly effort: NonNullable<ClaudeAdapterOptions["effort"]>;
+  private readonly effort: ClaudeAdapterOptions["effort"];
 
   constructor(options: ClaudeAdapterOptions = {}) {
     this.client = new Anthropic({ apiKey: options.apiKey });
     this.model  = options.model ?? "claude-haiku-5-5";
-    this.effort = options.effort ?? "low";
+    this.effort = options.effort ?? (options.model ? undefined : "low");
   }
 
   async infer(input: LlmInput): Promise<LlmOutput> {
@@ -130,7 +133,7 @@ export class ClaudeAdapter implements LlmAdapter {
       max_tokens: 16000,
       messages:   [{ role: "user", content: prompt }],
       output_config: {
-        effort: this.effort,
+        ...(this.effort ? { effort: this.effort } : {}),
         format: { type: "json_schema", schema: LLM_OUTPUT_SCHEMA },
       },
     });
