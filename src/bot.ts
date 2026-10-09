@@ -15,7 +15,7 @@
  *
  *   // Haiku
  *   const bot = new Bot(monitor, postbox, ipool, profile, {
- *     llm: new ClaudeAdapter({ model: "claude-haiku-4-5-20251001" }),
+ *     llm: new ClaudeAdapter({ model: "claude-haiku-5-5" }),
  *   });
  */
 
@@ -91,21 +91,25 @@ const LLM_OUTPUT_SCHEMA = {
  * The prompt is intentionally minimal: schema ID, fired weapon names,
  * and key metrics. Brain AI receives the full $I context separately.
  *
- * Model default: claude-haiku-4-5-20251001
- * Override: new ClaudeAdapter({ model: "claude-haiku-4-5-20251001", apiKey: "..." })
+ * Model default: claude-haiku-5-5
+ * Override: new ClaudeAdapter({ model: "claude-haiku-5-5", apiKey: "..." })
  */
 export interface ClaudeAdapterOptions {
   model?:  string;
   apiKey?: string;   // falls back to ANTHROPIC_API_KEY env var
+  /** Thinking depth (output_config.effort). Default "low": one-sentence classification. */
+  effort?: "low" | "medium" | "high" | "max";
 }
 
 export class ClaudeAdapter implements LlmAdapter {
   private readonly client: Anthropic;
   private readonly model:  string;
+  private readonly effort: NonNullable<ClaudeAdapterOptions["effort"]>;
 
   constructor(options: ClaudeAdapterOptions = {}) {
     this.client = new Anthropic({ apiKey: options.apiKey });
-    this.model  = options.model ?? "claude-haiku-4-5-20251001";
+    this.model  = options.model ?? "claude-haiku-5-5";
+    this.effort = options.effort ?? "low";
   }
 
   async infer(input: LlmInput): Promise<LlmOutput> {
@@ -125,7 +129,10 @@ export class ClaudeAdapter implements LlmAdapter {
       // A ceiling, not a target: models that think by default count thinking toward it.
       max_tokens: 16000,
       messages:   [{ role: "user", content: prompt }],
-      output_config: { format: { type: "json_schema", schema: LLM_OUTPUT_SCHEMA } },
+      output_config: {
+        effort: this.effort,
+        format: { type: "json_schema", schema: LLM_OUTPUT_SCHEMA },
+      },
     });
 
     // Schema-valid JSON is guaranteed only for a completed turn.

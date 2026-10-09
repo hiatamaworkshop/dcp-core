@@ -16,7 +16,7 @@
  *
  *   // Haiku
  *   const brain = new Brain(ipool, postbox, {
- *     adapter: new ClaudeBrain({ model: "claude-haiku-4-5-20251001" }),
+ *     adapter: new ClaudeBrain({ model: "claude-haiku-5-5" }),
  *   });
  */
 
@@ -176,6 +176,8 @@ export interface ClaudeBrainOptions {
   systemContext?: string;
   /** The pipeline ID that control actions target. Filled in by code; the model never chooses it. */
   pipelineId?:   string;
+  /** Thinking depth (output_config.effort). Default "medium". */
+  effort?:        "low" | "medium" | "high" | "max";
 }
 
 /**
@@ -189,12 +191,14 @@ export class ClaudeBrain implements BrainAdapter {
   private readonly model:         string;
   private readonly systemContext: string;
   private readonly pipelineId:    string;
+  private readonly effort:        NonNullable<ClaudeBrainOptions["effort"]>;
 
   constructor(options: ClaudeBrainOptions = {}) {
     this.client        = new Anthropic({ apiKey: options.apiKey });
-    this.model         = options.model ?? "claude-haiku-4-5-20251001";
+    this.model         = options.model ?? "claude-haiku-5-5";
     this.systemContext = options.systemContext ?? "";
     this.pipelineId    = options.pipelineId   ?? "pipeline://default";
+    this.effort        = options.effort       ?? "medium";
   }
 
   async evaluate(input: BrainInput): Promise<BrainDecision> {
@@ -241,7 +245,10 @@ export class ClaudeBrain implements BrainAdapter {
       // A ceiling, not a target: models that think by default count thinking toward it.
       max_tokens: 16000,
       messages:   [{ role: "user", content: prompt }],
-      output_config: { format: { type: "json_schema", schema: BRAIN_DECISION_SCHEMA } },
+      output_config: {
+        effort: this.effort,
+        format: { type: "json_schema", schema: BRAIN_DECISION_SCHEMA },
+      },
     });
 
     // Schema-valid JSON is guaranteed only for a completed turn

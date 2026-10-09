@@ -88,8 +88,9 @@ severity → action のガイドライン) をプロンプトにハードコー�
 
 `max_tokens` は上限であり、実際に生成した分だけ課金される。小さく絞ると `rationale` が長いときや
 アクションが複数あるときに JSON が途中で切れる（`stop_reason: "max_tokens"`）。
-また `thinking` を指定しなくても思考が既定で動くモデル（Sonnet 5 など）では、思考も `max_tokens` に数えられる。
-`ClaudeBrain` / `ClaudeAdapter` は 16000 にしている。
+また `thinking` を指定しなくても思考が既定で動くモデル（既定の Haiku 5.5、Sonnet 5 など）では、思考も `max_tokens` に数えられる。
+`ClaudeBrain` / `ClaudeAdapter` は 16000 にしている。思考の量は `effort` オプションで調整する
+（既定は `ClaudeAdapter` が `low`、`ClaudeBrain` が `medium`）。プロンプトで「すぐ答えて」と書いても思考は止まらない。
 
 ---
 

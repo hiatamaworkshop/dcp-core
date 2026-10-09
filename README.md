@@ -173,7 +173,7 @@ class MyBrain implements BrainAdapter {
 }
 
 // Claude (Haiku) — drop-in replacement, same interface
-const brain = new ClaudeBrain({ model: "claude-haiku-4-5-20251001" });
+const brain = new ClaudeBrain({ model: "claude-haiku-5-5" });
 ```
 
 Switch between rule-based and LLM with `BRAIN_MODE=claude`. The pipeline wiring is identical.

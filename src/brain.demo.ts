@@ -11,7 +11,7 @@
  *
  * To use Haiku:
  *   const brain = new Brain(ipool, postbox, {
- *     adapter: new ClaudeBrain({ model: "claude-haiku-4-5-20251001" }),
+ *     adapter: new ClaudeBrain({ model: "claude-haiku-5-5" }),
  *   });
  */
 
@@ -91,7 +91,7 @@ const bot       = new Bot(monitor, postbox, ipool, PROFILE);
 const brain     = new Brain(ipool, postbox, { pipelineId: "pipeline://demo-01" });
 // Haiku swap:
 // const brain = new Brain(ipool, postbox, {
-//   adapter: new ClaudeBrain({ model: "claude-haiku-4-5-20251001" }),
+//   adapter: new ClaudeBrain({ model: "claude-haiku-5-5" }),
 //   pipelineId: "pipeline://demo-01",
 // });
 
