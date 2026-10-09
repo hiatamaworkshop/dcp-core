@@ -218,7 +218,7 @@ Oracle Cloud Free Tier が現実的。ARM 4コア・24GB メモリが無料で�
 
 **設計案として記録。実装はフォーク新プロジェクトで着手。**
 
-`dcp-wrap` から Pipeline コアをライブラリとして切り出し、
+`dcp-core` から Pipeline コアをライブラリとして切り出し、
 Minecraft Plugin + DCP Pipeline Server を別リポジトリで構成する。
 
 ---

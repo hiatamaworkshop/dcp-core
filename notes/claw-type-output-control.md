@@ -34,9 +34,9 @@ schema + row → key-value pairs → natural language template
 
 The schema already carries field names. Decode is a lookup, not inference.
 
-## Why this matters for dcp-wrap
+## Why this matters for dcp-core
 
-dcp-wrap currently covers: JSON → schema inference → DCP encode.
+dcp-core currently covers: JSON → schema inference → DCP encode.
 
 A future addition: DCP → decode → human-readable. This completes the round-trip. The decode function would be small — schema + row → object or formatted string.
 

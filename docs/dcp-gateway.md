@@ -270,12 +270,12 @@ The gateway is a compression layer, not a security layer. It can coexist with an
 
 | Component | Role |
 |---|---|
-| **dcp-wrap** | Library — `dcpEncode()`, `SchemaGenerator`, CLI. The engine inside the gateway. |
+| **dcp-core** | Library — `dcpEncode()`, `SchemaGenerator`, CLI. The engine inside the gateway. |
 | **mcp-server-contract.md** | Convention for MCP servers that natively support DCP via `queryType`. Ideal but requires server modification. |
 | **picoclaw-hook** | Framework-specific hook (PicoClaw only). Proof of concept for the gateway pattern. |
 | **DCP Gateway** | Framework-agnostic proxy. Works with any MCP server, no modification needed. Generalizes what picoclaw-hook proved. |
 
-The gateway uses dcp-wrap internally. If an MCP server already supports `queryType: "agent"`, the gateway can inject it — but this is optional optimization, not a requirement.
+The gateway uses dcp-core internally. If an MCP server already supports `queryType: "agent"`, the gateway can inject it — but this is optional optimization, not a requirement.
 
 ## Implementation plan
 

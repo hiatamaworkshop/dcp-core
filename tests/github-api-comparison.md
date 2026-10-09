@@ -47,6 +47,6 @@ gh api repos/modelcontextprotocol/servers/issues?per_page=20 \
   > tests/github-issues-sample.json
 
 # Generate schema + encode
-cat tests/github-issues-sample.json | npx dcp-wrap init github-issue
-cat tests/github-issues-sample.json | npx dcp-wrap encode --schema dcp-schemas/github-issue.v1.json
+cat tests/github-issues-sample.json | npx dcp-core init github-issue
+cat tests/github-issues-sample.json | npx dcp-core encode --schema dcp-schemas/github-issue.v1.json
 ```

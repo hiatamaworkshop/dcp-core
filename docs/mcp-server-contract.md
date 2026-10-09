@@ -131,7 +131,7 @@ server.tool("export", {
 When `queryType: "agent"`, return DCP positional arrays:
 
 ```typescript
-import { dcpEncode } from "dcp-wrap";
+import { dcpEncode } from "dcp-core";
 
 const schema = { id: "my-results:v1", fields: ["id", "score", "title", "tags"] };
 
@@ -149,7 +149,7 @@ Output:
 
 The `$S` header declares the schema once. Each row is a positional array — no key repetition. The LLM reads positional data as well as keyed JSON, at a fraction of the token cost.
 
-If you don't want a dependency on dcp-wrap, format manually:
+If you don't want a dependency on dcp-core, format manually:
 
 ```typescript
 function formatAgent(results: any[]): string {
@@ -184,4 +184,4 @@ With the `queryType` contract:
 ## References
 
 - [DCP Specification](https://dcp-docs.pages.dev/dcp/specification) — full protocol design
-- [dcp-wrap](https://github.com/hiatamaworkshop/dcp-wrap) — encoder/decoder library + CLI
+- [dcp-core](https://github.com/hiatamaworkshop/dcp-core) — encoder/decoder library + CLI

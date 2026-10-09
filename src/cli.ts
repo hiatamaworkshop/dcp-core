@@ -49,8 +49,8 @@ function readInput(args: string[]): Record<string, unknown>[] {
 function cmdInit(args: string[]): void {
   const domain = args[0];
   if (!domain) {
-    console.error("Usage: dcp-wrap init <domain> [--samples file.json]");
-    console.error("  e.g.: cat data.json | dcp-wrap init github-pr");
+    console.error("Usage: dcp-core init <domain> [--samples file.json]");
+    console.error("  e.g.: cat data.json | dcp-core init github-pr");
     process.exit(1);
   }
 
@@ -81,7 +81,7 @@ function cmdInit(args: string[]): void {
 function cmdEncode(args: string[]): void {
   const schemaIdx = args.indexOf("--schema");
   if (schemaIdx === -1 || !args[schemaIdx + 1]) {
-    console.error("Usage: dcp-wrap encode --schema <schema.json> [--input file.json]");
+    console.error("Usage: dcp-core encode --schema <schema.json> [--input file.json]");
     process.exit(1);
   }
 
@@ -111,7 +111,7 @@ function cmdEncode(args: string[]): void {
 function cmdInspect(args: string[]): void {
   const schemaPath = args[0];
   if (!schemaPath) {
-    console.error("Usage: dcp-wrap inspect <schema.json>");
+    console.error("Usage: dcp-core inspect <schema.json>");
     process.exit(1);
   }
 
@@ -151,7 +151,7 @@ switch (command) {
     cmdInspect(args.slice(1));
     break;
   default:
-    console.error("dcp-wrap — Convert JSON to DCP positional-array format");
+    console.error("dcp-core — Convert JSON to DCP positional-array format");
     console.error("");
     console.error("Commands:");
     console.error("  init <domain> [--samples file.json]   Infer schema from JSON samples");
@@ -159,8 +159,8 @@ switch (command) {
     console.error("  inspect <schema.json>                  Show schema details");
     console.error("");
     console.error("Examples:");
-    console.error("  cat api-response.json | dcp-wrap init github-pr");
-    console.error("  cat data.json | dcp-wrap encode --schema dcp-schemas/github-pr.v1.json");
+    console.error("  cat api-response.json | dcp-core init github-pr");
+    console.error("  cat data.json | dcp-core encode --schema dcp-schemas/github-pr.v1.json");
     console.error("");
     console.error("Learn more: https://dcp-docs.pages.dev");
     process.exit(command ? 1 : 0);

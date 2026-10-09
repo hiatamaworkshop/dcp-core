@@ -1,6 +1,8 @@
-# dcp-wrap
+# dcp-core
 
 TypeScript implementation of [Data Cost Protocol (DCP)](https://dcp-docs.pages.dev) — compact structured data encoding for LLMs, plus a full pipeline control layer for high-throughput AI-driven data streams.
+
+> Formerly published as `dcp-wrap` (up to 0.3.1). To migrate, replace `dcp-wrap` with `dcp-core` in your dependencies and imports, and `npx dcp-wrap` with `npx dcp-core`.
 
 ## Two things in one package
 
@@ -27,7 +29,7 @@ Instead of sending `{"endpoint":"/v1/users","method":"GET","status":200}` per re
 ## Install
 
 ```bash
-npm install dcp-wrap
+npm install dcp-core
 ```
 
 ## CLI
@@ -35,7 +37,7 @@ npm install dcp-wrap
 ### Infer schema from JSON
 
 ```bash
-cat api-response.json | npx dcp-wrap init api-response
+cat api-response.json | npx dcp-core init api-response
 ```
 
 Output:
@@ -55,7 +57,7 @@ Saved: dcp-schemas/api-response.v1.mapping.json
 ### Encode JSON to DCP
 
 ```bash
-cat data.json | npx dcp-wrap encode --schema dcp-schemas/api-response.v1.json
+cat data.json | npx dcp-core encode --schema dcp-schemas/api-response.v1.json
 ```
 
 Output:
@@ -69,7 +71,7 @@ Output:
 ### Inspect a schema
 
 ```bash
-npx dcp-wrap inspect dcp-schemas/api-response.v1.json
+npx dcp-core inspect dcp-schemas/api-response.v1.json
 ```
 
 ## Programmatic API
@@ -77,7 +79,7 @@ npx dcp-wrap inspect dcp-schemas/api-response.v1.json
 ### Quick — one function, no files
 
 ```typescript
-import { dcpEncode } from "dcp-wrap";
+import { dcpEncode } from "dcp-core";
 
 const dcp = dcpEncode(results, {
   id: "engram-recall:v1",
@@ -98,7 +100,7 @@ const dcp = dcpEncode(records, schema, {
 ### Full — schema generation + encoding
 
 ```typescript
-import { SchemaGenerator, DcpEncoder, DcpSchema, FieldMapping } from "dcp-wrap";
+import { SchemaGenerator, DcpEncoder, DcpSchema, FieldMapping } from "dcp-core";
 
 const gen = new SchemaGenerator();
 const draft = gen.fromSamples(jsonRecords, { domain: "github-pr" });
@@ -136,7 +138,7 @@ Arrays of objects are encoded using **`$N` references**:
 
 ## Pipeline Control
 
-dcp-wrap includes a full streaming pipeline control layer. The core idea: **AI observes and reconfigures the pipeline from outside — it never enters the data path.**
+dcp-core includes a full streaming pipeline control layer. The core idea: **AI observes and reconfigures the pipeline from outside — it never enters the data path.**
 
 ```
 IngestionBus
@@ -159,8 +161,8 @@ IngestionBus
 ### Brain AI interface
 
 ```typescript
-import { Brain, RuleBasedBrain, ClaudeBrain } from "dcp-wrap";
-import type { BrainAdapter, BrainInput, BrainDecision } from "dcp-wrap";
+import { Brain, RuleBasedBrain, ClaudeBrain } from "dcp-core";
+import type { BrainAdapter, BrainInput, BrainDecision } from "dcp-core";
 
 // Rule-based (no LLM)
 class MyBrain implements BrainAdapter {

@@ -4,7 +4,7 @@
 
 PicoClaw has a modifiable `after_tool` hook that can transform tool output before it reaches the LLM. Out-of-process hooks communicate via JSON-RPC over stdio — any language works, including Node.js.
 
-This means dcp-wrap can run as an external hook process. No Go port needed.
+This means dcp-core can run as an external hook process. No Go port needed.
 
 ## Hook System
 
@@ -92,13 +92,13 @@ constrain only when structured output is needed.
 
 - DCP compression on any PicoClaw tool output, selectable per tool
 - No modification to PicoClaw core
-- dcp-wrap as the encoding engine (Node.js, already built)
+- dcp-core as the encoding engine (Node.js, already built)
 - Particularly valuable on edge devices (Raspberry Pi) where token cost matters most
 
 ## Why PicoClaw is the ideal testbed
 
 - 4 modifiable hooks = complete DCP pipeline without touching core
-- Out-of-process JSON-RPC = Node.js/dcp-wrap works directly
+- Out-of-process JSON-RPC = Node.js/dcp-core works directly
 - Edge devices (Raspberry Pi) = token cost is a real constraint, not theoretical
 - 26K stars, active development = visibility for DCP if successful
 - MCP native = engram DCP integration works out of the box
@@ -113,7 +113,7 @@ constrain only when structured output is needed.
 ## Dependencies
 
 - PicoClaw v0.2.4+ (hook system)
-- dcp-wrap (npm, already published)
+- dcp-core (npm, already published)
 - Node.js runtime on target device
 
 ## Status

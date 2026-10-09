@@ -1,11 +1,11 @@
 # DCP の現在地と方針（2026-10-09）
 
-dcp-wrap の最終コミットは 2026-05-28 で、以後の実装の知見は dcp-lighthouse に溜まっている。
+dcp-core の最終コミットは 2026-05-28 で、以後の実装の知見は dcp-lighthouse に溜まっている。
 本文書は、wrap を概念と仕様の持ち主として位置づけ直し、lighthouse で確かめられたことを wrap の構想へ戻すための整理である。
 VCP（別プロジェクト、音声と AI からの構造化データへの書き込みの規約）の側のセッションで、ユーザとの議論をもとに書いた。
 採るかどうか、どう直すかは wrap の判断による。
 
-参照時点。dcp-wrap `docs/PIPELINE_ARCHITECTURE.md`（「議論案: ブレインとシャドウの作法（draft）」と ZISV の節）、
+参照時点。dcp-core `docs/PIPELINE_ARCHITECTURE.md`（「議論案: ブレインとシャドウの作法（draft）」と ZISV の節）、
 dcp-lighthouse HEAD `9d2678e`（README の「到達目標」、`docs/devlog/ROADMAP_BRIEF.md` 2026-10-08 の節）、
 dcp-docs の `docs/index.md`・`docs/dcp/pipeline.md`・`docs/dcp/implementation.md`・`docs/research/format-comparison.md`・
 `docs/research/lightweight-llm.md`、vcp の `docs/TODO.md`（C100、C115）。
@@ -14,7 +14,7 @@ dcp-docs の `docs/index.md`・`docs/dcp/pipeline.md`・`docs/dcp/implementation
 
 | リポジトリ | 役割 | 現状 |
 |---|---|---|
-| dcp-wrap | 概念と仕様の持ち主。encoder とパイプラインの実装 | 2026-05-28 で停止 |
+| dcp-core | 概念と仕様の持ち主。encoder とパイプラインの実装 | 2026-05-28 で停止 |
 | dcp-lighthouse | 参照実装。観測と予見の層を、実データの較正つきで確かめる | 進行中（H3 の判定は 10-14 以降） |
 | dcp-docs | 公開の顔 | lighthouse の知見を写している（最終 08-23） |
 

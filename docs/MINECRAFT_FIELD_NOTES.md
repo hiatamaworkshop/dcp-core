@@ -1,7 +1,7 @@
 # dcp-minecraft から得た知見
 
-dcp-minecraft（2026-04-06〜04-18）は、dcp-wrap を `file:` 依存で使い、実際の Minecraft サーバーのイベントを
-パイプラインに流した実験場である。コアの概念はすべて dcp-wrap で定義されていて、dcp-minecraft には
+dcp-minecraft（2026-04-06〜04-18）は、dcp-core を `file:` 依存で使い、実際の Minecraft サーバーのイベントを
+パイプラインに流した実験場である。コアの概念はすべて dcp-core で定義されていて、dcp-minecraft には
 ドメイン固有の部品（Bukkit アダプタ、GameFilter、GameRuleBrain、ダッシュボード、ベンチマーク用サーバー）がある。
 
 この文書は、そこで分かったことのうちコアに効くものを集める。設計の前提は
@@ -111,8 +111,8 @@ dcp-minecraft で外した `high_flow` Weapon は、この前提で戻せる。
 - **配線されていないこと:** weight はログに出るだけで、判断には使われていない。`evaluate()` は基準の GameRuleBrain に
   そのまま委ね、`isAutonomous()` で Brain の呼び出しを省く経路も無い。
 - **計算の偏り:** `absorb()` は基準側（`canonAction`）の weight しか動かさず、LLM が何を選んだか（`llmAction`）は使っていない。
-- **重複:** アクションの種類（`ActionKind`）と主アクションの判定（`primaryAction`）を、dcp-wrap の [src/brain.ts](../src/brain.ts)
-  と同じ内容で書き直している。dcp-wrap 側が export していないためである。
+- **重複:** アクションの種類（`ActionKind`）と主アクションの判定（`primaryAction`）を、dcp-core の [src/brain.ts](../src/brain.ts)
+  と同じ内容で書き直している。dcp-core 側が export していないためである。
 
 コアに持ってくるなら、weight を Brain の呼び出しを省く判断に使う配線、`llmAction` の扱い、`ActionKind` の export を先に決める。
 lighthouse の実測（[POSITION_AND_DIRECTION.md](POSITION_AND_DIRECTION.md) §3）では、LLM の Brain の提案は
@@ -120,7 +120,7 @@ lighthouse の実測（[POSITION_AND_DIRECTION.md](POSITION_AND_DIRECTION.md) §
 
 ---
 
-## 6. すでに dcp-wrap に戻ったもの
+## 6. すでに dcp-core に戻ったもの
 
 - **botId と pipelineId の取り違え:** ClaudeBrain で、アクション対象の pipelineId をコードが埋めるようにした（[BRAIN_AI_NOTES.md](BRAIN_AI_NOTES.md) §2）。
 - **スキーマに無いフィールドの検出:** `SourceAdapter.decode()` が `extraFields` を返し、Preprocessor が `unknown_field` として隔離する（`e47e210`）。
