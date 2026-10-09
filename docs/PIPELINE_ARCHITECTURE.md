@@ -1160,7 +1160,8 @@ filter (`types: ["*"]`). It adds no overhead to the pipeline itself.
 | ProxyExporter | `proxy-exporter.ts` — MessagePool → PostBox bridge; pipeline has no PostBox knowledge |
 | PipelineControl | `pipeline-control.ts` — PostBox outbound → RoutingLayer/throttle/stop apply locally |
 | PostBox Recorder | `recorder.ts` — 実装済み。inbound/outbound 全メッセージを JSONL 記録。`replay()` で Brain AI をスナップショット差し替え可能 |
-| Bot (Lightweight Analyzer) | `bot.ts` — 実装済み。FastGate+Weapon パターン、$ST フィルタ → RuleBasedLlm (phi3:mini スワップ可) → $I → IPool |
+| Bot (Lightweight Analyzer) | `bot.ts` — 実装済み。FastGate+Weapon パターン（`minTotal` で薄い窓を除外）、$ST フィルタ → RuleBasedLlm / ClaudeAdapter → $I → IPool |
+| Claude 呼び出し記録 | `claude-meta.ts` — ClaudeAdapter / ClaudeBrain 共通。`onMeta` で stop_reason・usage・所要時間、`stats()` で stop_reason 別の回数 |
 | Brain AI | `brain.ts` — 実装済み。IPool drain → BrainAdapter(evaluate) → PostBox outbound。RuleBasedBrain(default) / ClaudeBrain(Haiku) スワップ可。**quarantine パス実装済み**: PostBox inbound "quarantine" を `quarantineBuffer` に蓄積 → tick() でドレイン → `BrainDecision.quarantineApprove/Reject` → `apply()` が PostBox へ発行。`flush()` でテスト・デモ用即時評価可能 |
 | Preprocessor | `preprocessor.ts` — 実装済み。Pass/Drop/Quarantine 判定、PostBox.pushQuarantine() 統合、Brain AI approve → re-inject 自動配線。**実装注意**: range_violation 判定は `reason.includes("< min") or includes("> max")` — validator が `"999 > max(150)"` 形式で出力するため `startsWith("range")` では検出不可。correctedRecord なし approve はサイレントドロップ（再 quarantine ループ防止） |
 | PipelineConnector | `pipeline-connector.ts` — 実装済み。同一プロセス内パイプライン間接続。schemaId ルーティング、ワイルドカード、setTable() でランタイム変更可。`ctrl.setConnector(connector, resolverFn)` で Brain AI の routing_update を connector に自動配線可能 |
@@ -1179,6 +1180,10 @@ $ST-f: ウィンドウ内に flow メッセージ（Streamer）が届けばそ�
 
 Bot の Weapon 評価（`pass_rate < 0.9` 等）にはこれで十分だが、
 統計エンジンは将来の要件に応じて**差し替え可能な構造**にする。
+
+固定閾値は件数の少ない窓で雑音に反応する（1 行の失敗で pass_rate 0）。`Weapon.minTotal` で薄い窓を外せる。
+誤警報率を較正した判定（窓の族に対する Šidák 補正、少数値の窓の正確な裾、過分散）は dcp-lighthouse 側で実装・実測している
+（`POSITION_AND_DIRECTION.md` §2）。
 
 ### 差し替え候補
 
@@ -1398,14 +1403,20 @@ TrialCollector は方式を区別せず $ST 差分だけを見るため、収集
 
 ---
 
-## テスト検証状況 (44 tests / 0 fail)
+## テスト検証状況 (`npm test`: 70 tests / 0 fail, 2026-10-09)
 
-| テストファイル | カバレッジ | 主要検証点 |
+| テストファイル | 件数 | 主要検証点 |
 |---|---|---|
-| `decoder.test.ts` | DcpDecoder (9) | decode / decodeRows / decodeRaw / validateRow roundtrip |
-| `pipeline-connector.test.ts` | PipelineConnector (8) + PipelineControl (2) | fanout / wildcard / setTable / routing_update via PostBox |
-| `validation.test.ts` | VShadow (9) + Preprocessor (4) + validation_update (3) | type/range/enum/pattern/maxLength / quarantine分類 / ランタイム制約更新 |
-| `pipeline-chain.test.ts` | A→B→C chain (2) + Brain rerouteSchema (2) + quarantine→downstream (3) | パイプラインチェーン完全性・Brain 経由ルーティング切替・quarantine approve/reject 後の下流到達確認 |
+| `decoder.test.ts` | 10 | decode / decodeRows / decodeRaw / validateRow roundtrip |
+| `pipeline-connector.test.ts` | 11 | fanout / wildcard / setTable / routing_update via PostBox |
+| `validation.test.ts` | 16 | type/range/enum/pattern/maxLength / quarantine分類 / ランタイム制約更新 |
+| `pipeline-chain.test.ts` | 7 | パイプラインチェーン完全性・Brain 経由ルーティング切替・quarantine approve/reject 後の下流到達確認 |
+| `extension-points.test.ts` | 13 | 外部観測層向けの拡張点（StCollector の窓の実行時変更、IngestionBus.tap、PipelineControl.onExtraDecision）、未使用時に既定の挙動が変わらないこと |
+| `st-collector.test.ts` | 4 | Streamer の無い構成で vResult 件数から `$ST-f` rowsPerSec を出す |
+| `weapon-min-total.test.ts` | 4 | `Weapon.minTotal` 未満の窓では発火しない、既定は従来どおり |
+| `claude-meta.test.ts` | 5 | Claude アダプタの呼び出し記録（stop_reason・usage・`stats()`）、effort は既定モデルのみ |
+
+`encoder.test.ts`（6 件）は `npm test` に含まれておらず、nested `$N` の 3 件が失敗している（2026-10-09 時点、未対応）。
 
 ### pipeline-chain.test.ts — 検証アーキテクチャ注意点
 
@@ -1427,7 +1438,7 @@ function wireForward(pl: PL, connector: PipelineConnector): void {
 
 | 項目 | 状態 | 備考 |
 |---|---|---|
-| Bot (phi3:mini 実運用) | 設計済み・stub 実装 | `RuleBasedLlm` でテスト可、実 LLM 接続は将来 |
+| Bot (phi3:mini 実運用) | 設計済み・stub 実装 | `RuleBasedLlm` でテスト可。Claude は `ClaudeAdapter` で接続済み、ローカル小型モデルは将来 |
 | TrialCollector / ZISV | 未実装 | `$R` ファンアウト実装後に着手 |
 | ProxyExporter (クロスプロセス) | 未実装 | 同一プロセス内 PipelineConnector は実装済み |
 

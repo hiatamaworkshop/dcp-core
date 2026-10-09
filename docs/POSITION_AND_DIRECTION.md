@@ -1,9 +1,10 @@
 # DCP の現在地と方針（2026-10-09）
 
-dcp-core の最終コミットは 2026-05-28 で、以後の実装の知見は dcp-lighthouse に溜まっている。
-本文書は、wrap を概念と仕様の持ち主として位置づけ直し、lighthouse で確かめられたことを wrap の構想へ戻すための整理である。
+dcp-core のコミットは 2026-05-28 から 10-09 まで止まっていて、その間の実装の知見は dcp-lighthouse に溜まった。
+（本文書は旧名 dcp-wrap の時期に書いた。10-09 の改名に合わせて名前だけ置き換えている。）
+本文書は、dcp-core を概念と仕様の持ち主として位置づけ直し、lighthouse で確かめられたことを dcp-core の構想へ戻すための整理である。
 VCP（別プロジェクト、音声と AI からの構造化データへの書き込みの規約）の側のセッションで、ユーザとの議論をもとに書いた。
-採るかどうか、どう直すかは wrap の判断による。
+採るかどうか、どう直すかは dcp-core の判断による。
 
 参照時点。dcp-core `docs/PIPELINE_ARCHITECTURE.md`（「議論案: ブレインとシャドウの作法（draft）」と ZISV の節）、
 dcp-lighthouse HEAD `9d2678e`（README の「到達目標」、`docs/devlog/ROADMAP_BRIEF.md` 2026-10-08 の節）、
@@ -14,11 +15,11 @@ dcp-docs の `docs/index.md`・`docs/dcp/pipeline.md`・`docs/dcp/implementation
 
 | リポジトリ | 役割 | 現状 |
 |---|---|---|
-| dcp-core | 概念と仕様の持ち主。encoder とパイプラインの実装 | 2026-05-28 で停止 |
+| dcp-core | 概念と仕様の持ち主。encoder とパイプラインの実装 | 05-28 から停止、10-09 に小さな還元で再開（§8） |
 | dcp-lighthouse | 参照実装。観測と予見の層を、実データの較正つきで確かめる | 進行中（H3 の判定は 10-14 以降） |
 | dcp-docs | 公開の顔 | lighthouse の知見を写している（最終 08-23） |
 
-提案。wrap は仕様、lighthouse は参照実装、dcp-docs は公開、の向きで知見を流す。wrap のコードを再開する必要はない。
+提案。dcp-core は仕様、lighthouse は参照実装、dcp-docs は公開、の向きで知見を流す。dcp-core のコードを再開する必要はない。
 lighthouse の節目（H3 の判定、F1 から F3 の着手）ごとに、本文書の §8 へ短い還元を足す。
 
 ## 2. draft「ブレインとシャドウの作法」は lighthouse でどこまで確かめられたか
@@ -32,7 +33,7 @@ Shadow weight pattern と Predictive Control Pattern の節である。後者は
 | シャドウは推論ゼロの短期予測バッファ、`$F`（新チャネル候補）で出す | draft | 未実装（コード検索で確認）。F2 として予定。curator の予測分布を horizon と信頼度つきで出す |
 | `$O` 分岐の仮想ストリーム、予測制御 | pipeline.md | 較正ハーネスの変換（注入、シャッフル、トレース単位の間引き）が同じ形をしている。F3 で本番と並走する常設の流れにする予定 |
 | 予測制御の判断は閾値との比較（例 `pessimistic < 0.80`） | pipeline.md | 比較の外れ方を測った。package 単位で誤警報 29%（07-28）、RC レンズで 41%（09-27）、実データで事象の独立を仮定すると 99.8%（10-06）。較正をしないと「統計に裏付けられた判断」は成り立たない |
-| 検証のタイミングは $R ファンアウトの実装時 | draft | wrap では検証されず、lighthouse の実データ較正期間（2026-09-27 事前登録）で確かめている |
+| 検証のタイミングは $R ファンアウトの実装時 | draft | dcp-core では検証されず、lighthouse の実データ較正期間（2026-09-27 事前登録）で確かめている |
 | Brain は数値を読んで判断し、推測しない | pipeline.md | 過分散を織り込んだ帰無（10-07）は次の窓の予測分布そのもので、警報は「実値が予測の外に出た」を意味する。予見のうち外れを判定する側は既にある |
 
 draft の方向は lighthouse の実測で支持された。ただし「予測を出せば判断が裏付けられる」は成り立たず、予測と実値のずれを
@@ -48,7 +49,7 @@ draft の方向は lighthouse の実測で支持された。ただし「予測�
   （Sonnet 5 では断定は 4.5% から 8.0% で動かず、観測変更が 54.5% から 4.0% に落ちた）。
 - このため lighthouse は、確認を集める場所を AI への指示ではなく、コードの側で決定の型ごとに決めるとした。
 
-wrap の「What Brain AI may and may not do」と PostBox による分離は、この実測と整合する。加えて、決定の型ごとに
+dcp-core の「What Brain AI may and may not do」と PostBox による分離は、この実測と整合する。加えて、決定の型ごとに
 戻せるかどうかを宣言し、戻せない型に確認を集める、という規則を仕様に足す価値がある。
 
 ## 4. 看板の見直し（提案）
@@ -89,8 +90,8 @@ README の「Two things in one package」は順序を入れ替え、パイプラ
    （`aggFuncUnscored`、2026-08-25）。VCP では、履歴が書き込み元の軸を持たずに実装され、AI が書いて確定しなかった値が、
    次の通常モードの起動時の復元で画面に載り、PdfAdapter では原本まで届く経路ができていた（2026-09 に C100、C115 で修正済み）。`$F` と仮想ストリームを入れると、この軸が無いまま仮想値が実値として読まれる経路が増える。
 
-相互に足せるもの。wrap の PostBox Recorder は inbound と outbound を JSONL で記録し、`replay()` で Brain を差し替えて再生できる。
-lighthouse は ClaudeBrain の生の出力を残しておらず、審議の再生を課題に挙げている。wrap の記録と再生の作法を lighthouse へ
+相互に足せるもの。dcp-core の PostBox Recorder は inbound と outbound を JSONL で記録し、`replay()` で Brain を差し替えて再生できる。
+lighthouse は ClaudeBrain の生の出力を残しておらず、審議の再生を課題に挙げている。dcp-core の記録と再生の作法を lighthouse へ
 持ち込める。
 
 ## 6. 外の動向（2026年）
@@ -137,3 +138,16 @@ dcp-docs の記載に合わせ、Native Operations は本体の文書を読ん�
 §5 の VCP の欠陥は修正済みであることを足した。§6 の MCP と arXiv の記述は原文と一致した。
 
 dcp-docs 側の要確認。format-comparison は本文で「4 models」と書くが、表には 3 モデルしか無い。
+
+### 2026-10-09 (2) 改名とコードへの小さな還元
+
+パッケージを dcp-wrap から dcp-core へ改名した（0.4.0、README に移行の注記）。npm への公開は保留している。
+
+§1 の「コードを再開する必要はない」は保ちつつ、lighthouse で確かめた教訓のうち、dcp-core の部品の欠陥に当たる 2 点だけをコードへ戻した
+（`ac28a08`）。どちらも既定の挙動は変えない。
+
+- `Weapon.minTotal`。件数の少ない窓は採点しない（lighthouse の `isScorable`）。固定閾値が 1 行の失敗で発火するのを止める。
+- Claude アダプタの呼び出し記録（`onMeta`、`stats()`）。refusal と `max_tokens` の打ち切りを数えられるようにした
+  （lighthouse で、カウンタを付けても読み手が無いと見られない、と分かったもの）。
+
+Šidák 補正、少数値の窓の正確な裾、過分散の帰無は較正つきの観測層そのものなので、lighthouse に置いたままにする。

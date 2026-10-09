@@ -176,9 +176,12 @@ class MyBrain implements BrainAdapter {
 
 // Claude (Haiku) — drop-in replacement, same interface
 const brain = new ClaudeBrain({ model: "claude-haiku-5-5" });
+
+// Every API call reports stop_reason, token usage and latency; stats() tallies stop_reasons
+const watched = new ClaudeBrain({ onMeta: (m) => console.log(m.stopReason, m.outputTokens) });
 ```
 
-Switch between rule-based and LLM with `BRAIN_MODE=claude`. The pipeline wiring is identical.
+Switching between rule-based and LLM is a matter of which adapter you pass. The pipeline wiring is identical.
 
 ### Shadow layers
 
@@ -186,13 +189,15 @@ Switch between rule-based and LLM with `BRAIN_MODE=claude`. The pipeline wiring 
 |-------|------|
 | `$V`  | Schema constraint validation — type, range, enum. Brain can tighten or relax constraints at runtime. |
 | `$R`  | Routing table — Brain reroutes schemas to different downstream pipelines. |
-| `$ST` | Rolling statistics — pass rate, fail count, throughput per schema per 2s window. |
+| `$ST` | Windowed statistics — pass rate, fail count, throughput per schema (1s window by default). |
 
 For the full protocol specification and design rationale, see [dcp-docs.pages.dev/dcp/pipeline](https://dcp-docs.pages.dev/dcp/pipeline).
 
 ### Working demo
 
 The [Minecraft Pipeline Demo](https://dcp-docs.pages.dev/demos/minecraft) shows all three layers working together: anomaly detection, Brain rerouting, `$V` dynamic update, Quarantine approval — verified across three scenarios with no LLM required for the data path.
+
+[dcp-lighthouse](https://dcp-docs.pages.dev/demos/lighthouse) is the reference implementation of an observation layer on top of this pipeline: it re-observes retained raw data through adjustable windows, and its anomaly gate reports its own false-alarm rate.
 
 ---
 
@@ -217,7 +222,7 @@ const draft = gen.fromSamples(samples, {
 
 ## Design
 
-- Zero runtime dependencies
+- One runtime dependency, `@anthropic-ai/sdk`, used only by the Claude adapters (`ClaudeBrain`, `ClaudeAdapter`)
 - Schema generation follows DCP field ordering convention (identifiers → classifiers → numerics → text)
 - Supports JSON arrays and NDJSON as input
 - Schema + mapping files are plain JSON — review, version, and edit them
