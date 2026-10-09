@@ -164,6 +164,8 @@ n tick ごとに $ST-brain サマリーを Brain のプロンプトに注入 →
 
 **ファイル**: `dcp-minecraft/server/src/shadow-rule-brain.ts`
 
+weight は判断に配線されていない（ログ出力のみ）。到達点と残りは [MINECRAFT_FIELD_NOTES.md](MINECRAFT_FIELD_NOTES.md) §5。
+
 #### Weight モデル
 
 各 `ActionKind` (rerouteSchema / throttle / stop / ...) ごとに weight: 0.0 → 1.0 を保持。

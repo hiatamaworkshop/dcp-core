@@ -1,5 +1,7 @@
 # DCP Pipeline × Minecraft Server — 設計案
 
+> 実装（dcp-minecraft、2026-04-06〜04-18）の結果と、そこから得た知見は [MINECRAFT_FIELD_NOTES.md](MINECRAFT_FIELD_NOTES.md) にある。
+
 ## 目的
 
 DCP Pipeline の有効性を実環境で検証するためのデモプロジェクト案。
