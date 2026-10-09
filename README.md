@@ -19,7 +19,7 @@ See [dcp-docs.pages.dev](https://dcp-docs.pages.dev) for the full protocol desig
 Instead of sending `{"endpoint":"/v1/users","method":"GET","status":200}` per record, DCP declares the schema once and writes values by position:
 
 ```
-["$S","api-response:v1","endpoint","method","status","latency_ms"]
+["$S","api-response:v1",4,"endpoint","method","status","latency_ms"]
 ["/v1/users","GET",200,42]
 ["/v1/orders","POST",201,187]
 ```
@@ -62,7 +62,7 @@ cat data.json | npx dcp-core encode --schema dcp-schemas/api-response.v1.json
 
 Output:
 ```
-["$S","api-response:v1","endpoint","method","status","latency_ms"]
+["$S","api-response:v1",4,"endpoint","method","status","latency_ms"]
 ["/v1/users","GET",200,42]
 ["/v1/orders","POST",201,187]
 ["/v1/auth","POST",200,95]
@@ -85,7 +85,7 @@ const dcp = dcpEncode(results, {
   id: "engram-recall:v1",
   fields: ["id", "relevance", "summary", "tags", "hitCount", "weight", "status"],
 });
-// ["$S","engram-recall:v1","id","relevance","summary","tags","hitCount","weight","status"]
+// ["$S","engram-recall:v1",7,"id","relevance","summary","tags","hitCount","weight","status"]
 // ["abc123",0.95,"port conflict fix","docker,gotcha",12,3.2,"fixed"]
 ```
 
@@ -128,7 +128,7 @@ The generator maps `metadata.author` → `author`, `metadata.state` → `state`.
 Arrays of objects are encoded using **`$N` references**:
 
 ```
-["$S","user:v1","id","name","teams"]
+["$S","user:v1",3,"id","name","teams"]
 ["u001","Alice",["$N","user.teams:v1",["t01","Infra","lead"],["t02","Security","member"]]]
 ["u002","Bob",["$N","user.teams:v1",["t03","Frontend","member"]]]
 ["u003","Charlie",["$N","user.teams:v1"]]

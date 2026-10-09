@@ -103,7 +103,7 @@ describe("Nested DCP Encoding", () => {
     assert.ok(teamsSub.mapping.paths);
   });
 
-  it("encodes array-of-objects with $R references (no preamble)", () => {
+  it("encodes array-of-objects with $N references (no preamble)", () => {
     const gen = new SchemaGenerator();
     const draft = gen.fromSamples(userSamples, { domain: "search_users" });
     const schema = new DcpSchema(draft.schema);
@@ -121,7 +121,8 @@ describe("Nested DCP Encoding", () => {
 
     // Alice's row
     const aliceRow = JSON.parse(lines[1]);
-    const teamsIdx = mainHeader.indexOf("teams") - 2;
+    // Header is ["$S", id, fieldCount, ...fields], so field i sits at header index i + 3.
+    const teamsIdx = mainHeader.indexOf("teams") - 3;
     const teamsVal = aliceRow[teamsIdx];
 
     // teams: ["$N", "search_users.teams:v1", [row1], [row2]]
@@ -132,7 +133,7 @@ describe("Nested DCP Encoding", () => {
     assert.ok(Array.isArray(teamsVal[2]), "team row 1 is an array");
   });
 
-  it("handles empty arrays as $R with no rows", () => {
+  it("handles empty arrays as $N with no rows", () => {
     const gen = new SchemaGenerator();
     const draft = gen.fromSamples(userSamples, { domain: "search_users" });
     const schema = new DcpSchema(draft.schema);
@@ -145,7 +146,7 @@ describe("Nested DCP Encoding", () => {
 
     // Charlie's row (3rd data row)
     const charlieRow = JSON.parse(lines[3]);
-    const teamsIdx = mainHeader.indexOf("teams") - 2;
+    const teamsIdx = mainHeader.indexOf("teams") - 3;
 
     // Empty → ["$N", "search_users.teams:v1"]
     const teamsVal = charlieRow[teamsIdx];
@@ -173,7 +174,7 @@ describe("Nested DCP Encoding", () => {
     const lines = DcpEncoder.toString(batch).split("\n");
     const row = JSON.parse(lines[1]);
     const header = JSON.parse(lines[0]);
-    const teamsIdx = header.indexOf("teams") - 2;
+    const teamsIdx = header.indexOf("teams") - 3;
     assert.equal(row[teamsIdx][0], "$N", "$N works after schema round-trip");
   });
 

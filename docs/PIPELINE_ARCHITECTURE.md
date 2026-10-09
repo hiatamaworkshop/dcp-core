@@ -1403,7 +1403,7 @@ TrialCollector は方式を区別せず $ST 差分だけを見るため、収集
 
 ---
 
-## テスト検証状況 (`npm test`: 70 tests / 0 fail, 2026-10-09)
+## テスト検証状況 (`npm test`: 76 tests / 0 fail, 2026-10-09)
 
 | テストファイル | 件数 | 主要検証点 |
 |---|---|---|
@@ -1415,8 +1415,10 @@ TrialCollector は方式を区別せず $ST 差分だけを見るため、収集
 | `st-collector.test.ts` | 4 | Streamer の無い構成で vResult 件数から `$ST-f` rowsPerSec を出す |
 | `weapon-min-total.test.ts` | 4 | `Weapon.minTotal` 未満の窓では発火しない、既定は従来どおり |
 | `claude-meta.test.ts` | 5 | Claude アダプタの呼び出し記録（stop_reason・usage・`stats()`）、effort は既定モデルのみ |
+| `encoder.test.ts` | 6 | nested `$N`（行あり・空配列・スキーマ往復）、JSON 比の削減率 |
 
-`encoder.test.ts`（6 件）は `npm test` に含まれておらず、nested `$N` の 3 件が失敗している（2026-10-09 時点、未対応）。
+`encoder.test.ts` は 03-30 に書かれてから `npm test` に入っておらず、04-01 に `$S` ヘッダーへ fieldCount が入った
+（`c3dce0b`）ことでフィールド位置の計算がずれて 3 件が落ちたまま気づかれなかった。10-09 に位置を直して `npm test` に加えた。
 
 ### pipeline-chain.test.ts — 検証アーキテクチャ注意点
 
